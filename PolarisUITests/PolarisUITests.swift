@@ -8,34 +8,65 @@
 import XCTest
 
 final class PolarisUITests: XCTestCase {
+    private var app: XCUIApplication!
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
+        app = XCUIApplication()
+        app.launchArguments.append("-useMockData")
+        app.launch()
     }
 
     override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+        app = nil
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
+    func testHomeToSearchToBookDetailSheet() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let searchInput = app.buttons["home.searchInput"]
+        XCTAssertTrue(searchInput.waitForExistence(timeout: 3))
+        searchInput.tap()
+        XCTAssertTrue(app.otherElements["searchScreen"].waitForExistence(timeout: 3))
+
+        let firstBookCell = app.collectionViews["search.bookCollection"].cells["bookCarouselCell"].firstMatch
+        XCTAssertTrue(firstBookCell.waitForExistence(timeout: 3))
+        firstBookCell.tap()
+        XCTAssertTrue(app.otherElements["bookDetailSheet"].waitForExistence(timeout: 3))
     }
 
     @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
+    func testHomeNavigationToLikes() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        app.buttons["home.likesButton"].tap()
+        XCTAssertTrue(app.otherElements["likesScreen"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeNavigationToAlerts() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        app.buttons["home.alertsButton"].tap()
+        XCTAssertTrue(app.otherElements["alertsScreen"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeNavigationToProfile() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        app.buttons["home.profileButton"].tap()
+        XCTAssertTrue(app.otherElements["profileScreen"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testHomeNavigationToLibraryDetail() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        let firstLibraryCell = app.collectionViews.cells["libraryCardCell"].firstMatch
+        XCTAssertTrue(firstLibraryCell.waitForExistence(timeout: 3))
+        firstLibraryCell.tap()
+        XCTAssertTrue(app.otherElements["libraryDetailScreen"].waitForExistence(timeout: 3))
     }
 }
