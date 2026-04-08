@@ -75,4 +75,14 @@ final class PolarisUITests: XCTestCase {
         firstLibraryCell.tap()
         XCTAssertTrue(app.otherElements["libraryDetailScreen"].waitForExistence(timeout: 3))
     }
+
+    @MainActor
+    func testHomeOpensLocationPicker() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        let locationButton = app.buttons["home.locationButton"]
+        XCTAssertTrue(locationButton.waitForExistence(timeout: 3))
+        locationButton.tap()
+        XCTAssertTrue(app.otherElements["locationPickerScreen"].waitForExistence(timeout: 3))
+    }
 }

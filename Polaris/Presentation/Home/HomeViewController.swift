@@ -7,7 +7,7 @@
 
 import UIKit
 
-final class HomeViewController: BaseViewController, UICollectionViewDelegate {
+final class HomeViewController: BaseViewController, UICollectionViewDelegate, LocationSelectionHandling {
     private static let librariesSection = 0
 
     private let viewModel: HomeViewModel
@@ -37,6 +37,9 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate {
 
     private func bind() {
         contentView.collectionView.delegate = self
+        contentView.locationButton.addAction(UIAction { [weak self] _ in
+            self?.viewModel.didTapLocationPicker()
+        }, for: .touchUpInside)
         contentView.searchButton.addAction(UIAction { [weak self] _ in
             self?.viewModel.didTapSearch()
         }, for: .touchUpInside)
@@ -67,7 +70,7 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate {
     }
 
     private func render(_ state: HomeViewModel.State) {
-        contentView.locationLabel.text = state.locationText
+        contentView.locationButton.update(address: state.selectedLocation.roadAddress)
         contentView.distanceChipView.updateSelection(state.selectedDistance)
         contentView.excludeToggle.isSelected = state.excludeClosed
         contentView.collectionView.backgroundView = state.libraries.isEmpty
@@ -97,10 +100,14 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate {
         guard let library = dataSource.itemIdentifier(for: indexPath) else { return }
         viewModel.didSelectLibrary(id: library.id)
     }
+
+    func applySelectedLocation(_ suggestion: AddressSuggestion) {
+        _ = viewModel.didUpdateLocation(suggestion)
+    }
 }
 
 private final class HomeView: UIView {
-    let locationLabel = UILabel()
+    let locationButton = HomeLocationButton()
     let likeButton = IconActionButton(symbolName: "heart", style: .soft, accessibilityLabel: "찜 화면 열기")
     let alertButton = IconActionButton(symbolName: "bell", style: .soft, accessibilityLabel: "알림 화면 열기")
     let profileButton = IconActionButton(symbolName: "person.crop.circle", style: .soft, accessibilityLabel: "프로필 화면 열기")
@@ -114,9 +121,6 @@ private final class HomeView: UIView {
         super.init(frame: frame)
         backgroundColor = AppColor.background
 
-        locationLabel.font = AppTypography.headline
-        locationLabel.textColor = AppColor.textPrimary
-
         let actionStack = UIStackView(arrangedSubviews: [likeButton, alertButton, profileButton])
         actionStack.axis = .horizontal
         actionStack.spacing = 6
@@ -127,19 +131,20 @@ private final class HomeView: UIView {
 
         collectionView.backgroundColor = .clear
 
-        addSubviews(locationLabel, actionStack, searchButton, distanceHeader, distanceChipView, libraryHeader, collectionView)
-        [locationLabel, actionStack, searchButton, distanceHeader, distanceChipView, libraryHeader, collectionView].forEach {
+        addSubviews(locationButton, actionStack, searchButton, distanceHeader, distanceChipView, libraryHeader, collectionView)
+        [locationButton, actionStack, searchButton, distanceHeader, distanceChipView, libraryHeader, collectionView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
         NSLayoutConstraint.activate([
-            locationLabel.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
-            locationLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
+            locationButton.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
+            locationButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
+            locationButton.trailingAnchor.constraint(lessThanOrEqualTo: actionStack.leadingAnchor, constant: -AppSpacing.m),
 
-            actionStack.centerYAnchor.constraint(equalTo: locationLabel.centerYAnchor),
+            actionStack.centerYAnchor.constraint(equalTo: locationButton.centerYAnchor),
             actionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            searchButton.topAnchor.constraint(equalTo: locationLabel.bottomAnchor, constant: AppSpacing.l),
+            searchButton.topAnchor.constraint(equalTo: locationButton.bottomAnchor, constant: AppSpacing.l),
             searchButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             searchButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
             searchButton.heightAnchor.constraint(equalToConstant: 46),
@@ -164,6 +169,7 @@ private final class HomeView: UIView {
         ])
 
         accessibilityIdentifier = "homeScreen"
+        locationButton.accessibilityIdentifier = "home.locationButton"
         searchButton.accessibilityIdentifier = "home.searchInput"
         likeButton.accessibilityIdentifier = "home.likesButton"
         alertButton.accessibilityIdentifier = "home.alertsButton"
@@ -189,5 +195,51 @@ private final class HomeView: UIView {
             section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
             return section
         }
+    }
+}
+
+private final class HomeLocationButton: UIControl {
+    private let addressLabel = UILabel()
+    private let locationIconView = UIImageView(image: UIImage(systemName: "location.fill"))
+    private let chevronView = UIImageView(image: UIImage(systemName: "chevron.down"))
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        addressLabel.font = AppTypography.headline
+        addressLabel.textColor = AppColor.textPrimary
+        addressLabel.numberOfLines = 1
+        addressLabel.lineBreakMode = .byTruncatingTail
+
+        locationIconView.tintColor = AppColor.accent
+        locationIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        chevronView.tintColor = AppColor.textSecondary
+        chevronView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+
+        let addressRow = UIStackView(arrangedSubviews: [locationIconView, addressLabel, chevronView])
+        addressRow.axis = .horizontal
+        addressRow.spacing = AppSpacing.xs
+        addressRow.alignment = .center
+
+        addSubview(addressRow)
+        addressRow.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            addressRow.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            addressRow.leadingAnchor.constraint(equalTo: leadingAnchor),
+            addressRow.trailingAnchor.constraint(equalTo: trailingAnchor),
+            addressRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 32)
+        ])
+
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(address: String) {
+        addressLabel.text = address
+        accessibilityLabel = "현재 주소 \(address)"
     }
 }

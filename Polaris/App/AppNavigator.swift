@@ -7,6 +7,10 @@
 
 import UIKit
 
+protocol LocationSelectionHandling: AnyObject {
+    func applySelectedLocation(_ suggestion: AddressSuggestion)
+}
+
 @MainActor
 final class AppNavigator {
     private let navigationController: UINavigationController
@@ -32,6 +36,18 @@ final class AppNavigator {
             navigationController.pushViewController(makeAlerts(), animated: true)
         case .profile:
             navigationController.pushViewController(makeProfile(), animated: true)
+        case let .locationPicker(currentLocation):
+            guard let locationHandler = source as? LocationSelectionHandling else { return }
+            let controller = makeLocationPicker(currentLocation: currentLocation) { [weak locationHandler] address in
+                locationHandler?.applySelectedLocation(address)
+            }
+            controller.modalPresentationStyle = .pageSheet
+            if let sheet = controller.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = true
+                sheet.preferredCornerRadius = AppRadius.large
+            }
+            source.present(controller, animated: true)
         case let .libraryDetail(id):
             navigationController.pushViewController(makeLibraryDetail(id: id), animated: true)
         case let .bookDetail(id):
@@ -51,6 +67,17 @@ final class AppNavigator {
     private func makeHome() -> HomeViewController {
         let viewModel = HomeViewModel(libraryRepository: dependencies.libraryRepository)
         return HomeViewController(viewModel: viewModel, navigator: self)
+    }
+
+    private func makeLocationPicker(
+        currentLocation: AddressSuggestion,
+        onSelection: @escaping (AddressSuggestion) -> Void
+    ) -> LocationPickerViewController {
+        let viewModel = LocationPickerViewModel(
+            currentLocation: currentLocation,
+            locationAddressService: dependencies.locationAddressService
+        )
+        return LocationPickerViewController(viewModel: viewModel, onSelection: onSelection)
     }
 
     private func makeSearch() -> SearchResultsViewController {

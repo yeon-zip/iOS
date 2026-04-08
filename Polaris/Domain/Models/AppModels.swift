@@ -77,6 +77,14 @@ struct SearchQuery: Hashable, Sendable {
     var excludeUnavailable: Bool
 }
 
+struct AddressSuggestion: Identifiable, Hashable, Sendable {
+    let id: String
+    let roadAddress: String
+    let detailText: String
+    let latitude: Double?
+    let longitude: Double?
+}
+
 struct BadgeContent: Hashable, Sendable {
     enum Tone: Hashable, Sendable {
         case blue
@@ -156,6 +164,7 @@ struct AlertItem: Identifiable, Hashable, Sendable {
     let id: String
     let section: AlertSection
     let book: BookSummary
+    let libraryName: String
 }
 
 struct UserProfile: Hashable, Sendable {

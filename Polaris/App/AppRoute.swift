@@ -12,6 +12,7 @@ enum AppRoute: Hashable {
     case likes
     case alerts
     case profile
+    case locationPicker(currentLocation: AddressSuggestion)
     case libraryDetail(id: String)
     case bookDetail(id: String)
     case back

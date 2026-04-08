@@ -90,23 +90,29 @@ struct FavoriteBookItemViewData: Identifiable, Hashable, Sendable {
 
 struct AlertBookItemViewData: Identifiable, Hashable, Sendable {
     let id: String
+    let bookID: String
     let title: String
-    let subtitle: String
+    let metadataText: String
+    let libraryName: String
     let badges: [BadgeContent]
     let isAlertEnabled: Bool
 
     static func == (lhs: AlertBookItemViewData, rhs: AlertBookItemViewData) -> Bool {
         lhs.id == rhs.id &&
+        lhs.bookID == rhs.bookID &&
         lhs.title == rhs.title &&
-        lhs.subtitle == rhs.subtitle &&
+        lhs.metadataText == rhs.metadataText &&
+        lhs.libraryName == rhs.libraryName &&
         lhs.badges == rhs.badges &&
         lhs.isAlertEnabled == rhs.isAlertEnabled
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+        hasher.combine(bookID)
         hasher.combine(title)
-        hasher.combine(subtitle)
+        hasher.combine(metadataText)
+        hasher.combine(libraryName)
         hasher.combine(badges)
         hasher.combine(isAlertEnabled)
     }

@@ -28,9 +28,11 @@ final class AlarmViewModel {
         state.sections = Dictionary(grouping: alerts, by: \.section).mapValues { items in
             items.map { item in
                 AlertBookItemViewData(
-                    id: item.book.id,
+                    id: item.id,
+                    bookID: item.book.id,
                     title: item.book.title,
-                    subtitle: "\(item.book.author) · \(item.book.publisher)",
+                    metadataText: "\(item.book.author) · \(item.book.publisher)",
+                    libraryName: item.libraryName,
                     badges: item.book.loanStatus.map { [makeLoanBadge($0)] } ?? [],
                     isAlertEnabled: item.book.isAlertEnabled
                 )
@@ -53,8 +55,10 @@ final class AlarmViewModel {
             guard let item = state.sections[section]?[index] else { continue }
             state.sections[section]?[index] = AlertBookItemViewData(
                 id: item.id,
+                bookID: item.bookID,
                 title: item.title,
-                subtitle: item.subtitle,
+                metadataText: item.metadataText,
+                libraryName: item.libraryName,
                 badges: item.badges,
                 isAlertEnabled: item.isAlertEnabled == false
             )

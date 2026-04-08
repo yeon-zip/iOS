@@ -267,6 +267,7 @@ class BookInfoCardCell: UICollectionViewCell {
     let containerView = CardContainerView()
     let titleLabel = UILabel()
     let subtitleLabel = UILabel()
+    let supportingLabel = UILabel()
     let badgeStack = UIStackView()
     let actionsStack = UIStackView()
 
@@ -281,6 +282,11 @@ class BookInfoCardCell: UICollectionViewCell {
         titleLabel.numberOfLines = 2
         subtitleLabel.font = AppTypography.caption
         subtitleLabel.textColor = AppColor.textSecondary
+        subtitleLabel.numberOfLines = 2
+        supportingLabel.font = AppTypography.tiny
+        supportingLabel.textColor = AppColor.accent
+        supportingLabel.numberOfLines = 1
+        supportingLabel.isHidden = true
 
         badgeStack.axis = .horizontal
         badgeStack.spacing = AppSpacing.s
@@ -288,8 +294,8 @@ class BookInfoCardCell: UICollectionViewCell {
         actionsStack.spacing = 2
         actionsStack.alignment = .center
 
-        containerView.addSubviews(titleLabel, subtitleLabel, badgeStack, actionsStack)
-        [titleLabel, subtitleLabel, badgeStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        containerView.addSubviews(titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack)
+        [titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AppSpacing.l),
@@ -303,7 +309,11 @@ class BookInfoCardCell: UICollectionViewCell {
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
 
-            badgeStack.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: AppSpacing.l),
+            supportingLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 6),
+            supportingLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            supportingLabel.trailingAnchor.constraint(lessThanOrEqualTo: containerView.trailingAnchor, constant: -AppSpacing.l),
+
+            badgeStack.topAnchor.constraint(equalTo: supportingLabel.bottomAnchor, constant: AppSpacing.l),
             badgeStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             badgeStack.trailingAnchor.constraint(lessThanOrEqualTo: containerView.trailingAnchor, constant: -AppSpacing.l),
             badgeStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l)
@@ -316,15 +326,19 @@ class BookInfoCardCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        supportingLabel.text = nil
+        supportingLabel.isHidden = true
         badgeStack.arrangedSubviews.forEach { view in
             badgeStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
     }
 
-    func configure(title: String, subtitle: String, badges: [BadgeContent]) {
+    func configure(title: String, subtitle: String, supportingText: String? = nil, badges: [BadgeContent]) {
         titleLabel.text = title
         subtitleLabel.text = subtitle
+        supportingLabel.text = supportingText
+        supportingLabel.isHidden = supportingText?.isEmpty != false
         for badge in badges {
             badgeStack.addArrangedSubview(StatusBadgeView(content: badge))
         }
@@ -398,7 +412,12 @@ final class AlertBookCell: BookInfoCardCell {
     }
 
     func configure(viewData: AlertBookItemViewData) {
-        configure(title: viewData.title, subtitle: viewData.subtitle, badges: viewData.badges)
+        configure(
+            title: viewData.title,
+            subtitle: viewData.metadataText,
+            supportingText: "알림 도서관 · \(viewData.libraryName)",
+            badges: viewData.badges
+        )
         bellButton.setSymbolName(viewData.isAlertEnabled ? "bell.fill" : "bell")
         bellButton.accessibilityLabel = viewData.isAlertEnabled ? "알림 해제" : "알림 설정"
         bellButton.setForegroundColor(viewData.isAlertEnabled ? AppColor.accent : AppColor.textTertiary)

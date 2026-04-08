@@ -91,7 +91,7 @@ final class AlarmViewController: BaseViewController, UICollectionViewDelegate {
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         guard let item = dataSource.itemIdentifier(for: indexPath) else { return }
-        viewModel.didSelectBook(id: item.id)
+        viewModel.didSelectBook(id: item.bookID)
     }
 }
 

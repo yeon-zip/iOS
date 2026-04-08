@@ -10,7 +10,13 @@ import Foundation
 @MainActor
 final class HomeViewModel {
     struct State: Equatable {
-        var locationText = "경상북도 구미시 대학로 61"
+        var selectedLocation = AddressSuggestion(
+            id: "home-default-location",
+            roadAddress: "경상북도 구미시 대학로 61",
+            detailText: "기본 위치",
+            latitude: 36.1450,
+            longitude: 128.3937
+        )
         var selectedDistance: DistanceOption = .oneKm
         var excludeClosed = false
         var libraries: [LibraryCardItemViewData] = []
@@ -48,6 +54,10 @@ final class HomeViewModel {
         onRoute?(.profile)
     }
 
+    func didTapLocationPicker() {
+        onRoute?(.locationPicker(currentLocation: state.selectedLocation))
+    }
+
     @discardableResult
     func didSelectDistance(_ distance: DistanceOption) -> Task<Void, Never> {
         state.selectedDistance = distance
@@ -66,6 +76,13 @@ final class HomeViewModel {
         onRoute?(.libraryDetail(id: id))
     }
 
+    @discardableResult
+    func didUpdateLocation(_ location: AddressSuggestion) -> Task<Void, Never> {
+        state.selectedLocation = location
+        onStateChange?(state)
+        return scheduleRefresh()
+    }
+
     func didToggleFavorite(id: String) {
         guard let index = state.libraries.firstIndex(where: { $0.id == id }) else { return }
         let item = state.libraries[index]
@@ -82,7 +99,11 @@ final class HomeViewModel {
     }
 
     private var currentRequest: HomeLibrariesRequest {
-        HomeLibrariesRequest(distance: state.selectedDistance, excludeClosed: state.excludeClosed)
+        HomeLibrariesRequest(
+            origin: state.selectedLocation,
+            distance: state.selectedDistance,
+            excludeClosed: state.excludeClosed
+        )
     }
 
     private func scheduleRefresh() -> Task<Void, Never> {
@@ -100,6 +121,7 @@ final class HomeViewModel {
 
     private func refreshLibraries(request: HomeLibrariesRequest, generation: Int?) async {
         let libraries = await libraryRepository.fetchHomeLibraries(
+            origin: request.origin,
             distance: request.distance,
             excludeClosed: request.excludeClosed
         )
@@ -124,6 +146,7 @@ final class HomeViewModel {
 }
 
 private struct HomeLibrariesRequest: Equatable {
+    let origin: AddressSuggestion
     let distance: DistanceOption
     let excludeClosed: Bool
 }

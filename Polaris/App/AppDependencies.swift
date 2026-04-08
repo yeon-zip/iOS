@@ -33,6 +33,7 @@ struct AppDependencies {
     let favoritesRepository: any FavoritesRepository
     let alertsRepository: any AlertsRepository
     let profileRepository: any ProfileRepository
+    let locationAddressService: any LocationAddressService
 
     static let mock = AppDependencies(
         searchRepository: MockSearchRepository(),
@@ -40,7 +41,8 @@ struct AppDependencies {
         libraryRepository: MockLibraryRepository(),
         favoritesRepository: MockFavoritesRepository(),
         alertsRepository: MockAlertsRepository(),
-        profileRepository: MockProfileRepository()
+        profileRepository: MockProfileRepository(),
+        locationAddressService: AppleLocationAddressService()
     )
 
     static func make(for environment: AppEnvironment = .current) -> AppDependencies {

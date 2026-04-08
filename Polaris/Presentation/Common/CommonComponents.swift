@@ -95,6 +95,7 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
 
     var onSubmit: ((String) -> Void)?
     var onTap: (() -> Void)?
+    var onTextChanged: ((String) -> Void)?
 
     var text: String {
         get { textField.text ?? "" }
@@ -124,6 +125,7 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         textField.textColor = AppColor.textPrimary
         textField.returnKeyType = .search
         textField.delegate = self
+        textField.addTarget(self, action: #selector(handleTextChanged(_:)), for: .editingChanged)
 
         addSubview(containerView)
         containerView.translatesAutoresizingMaskIntoConstraints = false
@@ -170,6 +172,10 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         onSubmit?(textField.text ?? "")
         textField.resignFirstResponder()
         return true
+    }
+
+    @objc private func handleTextChanged(_ sender: UITextField) {
+        onTextChanged?(sender.text ?? "")
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
