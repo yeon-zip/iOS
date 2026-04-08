@@ -8,54 +8,70 @@
 import UIKit
 
 enum AppColor {
-    static let background = UIColor(hex: 0xF2F4F6)
+    static let background = UIColor(hex: 0xF6F7FB)
     static let surface = UIColor.white
-    static let elevated = UIColor(hex: 0xF9FAFB)
-    static let line = UIColor(hex: 0xE5E8EB)
-    static let textPrimary = UIColor(hex: 0x191F28)
-    static let textSecondary = UIColor(hex: 0x6B7684)
-    static let textTertiary = UIColor(hex: 0x8B95A1)
-    static let accent = UIColor(hex: 0x3182F6)
+    static let elevated = UIColor(hex: 0xF1F4F8)
+    static let line = UIColor(hex: 0xE8ECF2)
+    static let lineStrong = UIColor(hex: 0xD7DEE8)
+    static let textPrimary = UIColor(hex: 0x1B2430)
+    static let textSecondary = UIColor(hex: 0x566170)
+    static let textTertiary = UIColor(hex: 0x98A2B3)
+    static let accent = UIColor(hex: 0x3478F6)
+    static let accentSurface = UIColor(hex: 0xEEF4FF)
     static let success = UIColor(hex: 0x2F9E44)
+    static let successSurface = UIColor(hex: 0xEAF7ED)
     static let danger = UIColor(hex: 0xF04452)
-    static let warning = UIColor(hex: 0xF2C94C)
-    static let chipFill = UIColor(hex: 0xF7F8FA)
-    static let shadow = UIColor(hex: 0x101828, alpha: 0.08)
+    static let dangerSurface = UIColor(hex: 0xFDEBEC)
+    static let warning = UIColor(hex: 0xFFB84D)
+    static let warningSurface = UIColor(hex: 0xFFF4D8)
+    static let heart = UIColor(hex: 0xFF6B81)
+    static let heartSurface = UIColor(hex: 0xFFF0F4)
+    static let iconSurface = UIColor(hex: 0xF3F5F8)
+    static let chipFill = UIColor(hex: 0xF7F9FC)
+    static let shadow = UIColor(hex: 0x0F172A, alpha: 0.04)
 }
 
 enum AppTypography {
-    static let hero = UIFont.systemFont(ofSize: 22, weight: .bold)
-    static let title = UIFont.systemFont(ofSize: 28, weight: .bold)
-    static let section = UIFont.systemFont(ofSize: 22, weight: .bold)
-    static let headline = UIFont.systemFont(ofSize: 18, weight: .semibold)
-    static let body = UIFont.systemFont(ofSize: 16, weight: .medium)
-    static let subheadline = UIFont.systemFont(ofSize: 15, weight: .medium)
-    static let caption = UIFont.systemFont(ofSize: 13, weight: .medium)
-    static let tiny = UIFont.systemFont(ofSize: 12, weight: .semibold)
+    static let hero = rounded(22, weight: .semibold)
+    static let title = rounded(18, weight: .semibold)
+    static let section = rounded(17, weight: .semibold)
+    static let headline = rounded(16, weight: .semibold)
+    static let body = rounded(14, weight: .regular)
+    static let subheadline = rounded(14, weight: .semibold)
+    static let caption = rounded(12, weight: .regular)
+    static let tiny = rounded(11, weight: .semibold)
+
+    private static func rounded(_ size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let baseFont = UIFont.systemFont(ofSize: size, weight: weight)
+        guard let descriptor = baseFont.fontDescriptor.withDesign(.rounded) else {
+            return baseFont
+        }
+        return UIFont(descriptor: descriptor, size: size)
+    }
 }
 
 enum AppSpacing {
     static let xs: CGFloat = 4
     static let s: CGFloat = 8
     static let m: CGFloat = 12
-    static let l: CGFloat = 16
-    static let xl: CGFloat = 20
-    static let xxl: CGFloat = 24
-    static let xxxl: CGFloat = 32
+    static let l: CGFloat = 12
+    static let xl: CGFloat = 16
+    static let xxl: CGFloat = 18
+    static let xxxl: CGFloat = 24
 }
 
 enum AppRadius {
-    static let small: CGFloat = 12
+    static let small: CGFloat = 10
     static let medium: CGFloat = 18
-    static let large: CGFloat = 24
+    static let large: CGFloat = 28
 }
 
 enum AppShadow {
     static func applyCard(to view: UIView) {
         view.layer.shadowColor = AppColor.shadow.cgColor
         view.layer.shadowOpacity = 1
-        view.layer.shadowOffset = CGSize(width: 0, height: 8)
-        view.layer.shadowRadius = 20
+        view.layer.shadowOffset = CGSize(width: 0, height: 5)
+        view.layer.shadowRadius = 14
         view.layer.masksToBounds = false
     }
 }

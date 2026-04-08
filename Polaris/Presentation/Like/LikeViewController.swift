@@ -143,21 +143,21 @@ private final class LikeView: UIView {
         [headerView, segmentControl, dividerView, collectionView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
+            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            segmentControl.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.l),
+            segmentControl.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.m),
             segmentControl.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             segmentControl.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
-            segmentControl.heightAnchor.constraint(equalToConstant: 44),
+            segmentControl.heightAnchor.constraint(equalToConstant: 40),
 
             dividerView.topAnchor.constraint(equalTo: segmentControl.bottomAnchor),
             dividerView.leadingAnchor.constraint(equalTo: segmentControl.leadingAnchor),
             dividerView.trailingAnchor.constraint(equalTo: segmentControl.trailingAnchor),
             dividerView.heightAnchor.constraint(equalToConstant: 1),
 
-            collectionView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: AppSpacing.l),
+            collectionView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: AppSpacing.m),
             collectionView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
@@ -174,14 +174,14 @@ private final class LikeView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = AppSpacing.m
+            section.interGroupSpacing = AppSpacing.s
             section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
             return section
         }

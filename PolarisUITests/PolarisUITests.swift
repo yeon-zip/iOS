@@ -33,6 +33,12 @@ final class PolarisUITests: XCTestCase {
         let firstBookCell = app.collectionViews["search.bookCollection"].cells["bookCarouselCell"].firstMatch
         XCTAssertTrue(firstBookCell.waitForExistence(timeout: 3))
         firstBookCell.tap()
+
+        XCTAssertFalse(app.otherElements["bookDetailSheet"].exists)
+
+        let detailButton = firstBookCell.buttons["bookCarouselCell.detailButton"]
+        XCTAssertTrue(detailButton.waitForExistence(timeout: 3))
+        detailButton.tap()
         XCTAssertTrue(app.otherElements["bookDetailSheet"].waitForExistence(timeout: 3))
     }
 

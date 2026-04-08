@@ -111,11 +111,11 @@ private final class AlarmRootView: UIView {
         collectionView.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
+            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            collectionView.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xxl),
+            collectionView.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xl),
             collectionView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
@@ -132,17 +132,17 @@ private final class AlarmRootView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(104)
+                heightDimension: .estimated(96)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(104)
+                heightDimension: .estimated(96)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = AppSpacing.m
+            section.interGroupSpacing = AppSpacing.s
             section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
             let header = NSCollectionLayoutBoundarySupplementaryItem(
-                layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(28)),
+                layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(24)),
                 elementKind: UICollectionView.elementKindSectionHeader,
                 alignment: .top
             )

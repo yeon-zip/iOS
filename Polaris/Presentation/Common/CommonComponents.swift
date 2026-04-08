@@ -13,6 +13,8 @@ final class CardContainerView: UIView {
         backgroundColor = AppColor.surface
         layer.cornerRadius = AppRadius.medium
         layer.cornerCurve = .continuous
+        layer.borderWidth = 1
+        layer.borderColor = AppColor.line.cgColor
         AppShadow.applyCard(to: self)
     }
 
@@ -22,14 +24,27 @@ final class CardContainerView: UIView {
 }
 
 final class IconActionButton: UIButton {
-    private var currentSymbolName: String
-
-    override var intrinsicContentSize: CGSize {
-        CGSize(width: 44, height: 44)
+    enum Style {
+        case plain
+        case soft
     }
 
-    init(symbolName: String, accessibilityLabel: String? = nil) {
+    private var currentSymbolName: String
+    private var foregroundColor = AppColor.textSecondary
+    private let style: Style
+
+    override var intrinsicContentSize: CGSize {
+        switch style {
+        case .plain:
+            return CGSize(width: 32, height: 32)
+        case .soft:
+            return CGSize(width: 36, height: 36)
+        }
+    }
+
+    init(symbolName: String, style: Style = .plain, accessibilityLabel: String? = nil) {
         currentSymbolName = symbolName
+        self.style = style
         super.init(frame: .zero)
         contentHorizontalAlignment = .center
         contentVerticalAlignment = .center
@@ -48,20 +63,32 @@ final class IconActionButton: UIButton {
         applyConfiguration(symbolName: symbolName)
     }
 
+    func setForegroundColor(_ color: UIColor) {
+        foregroundColor = color
+        applyConfiguration(symbolName: currentSymbolName)
+    }
+
     private func applyConfiguration(symbolName: String) {
         var configuration = UIButton.Configuration.plain()
         configuration.image = UIImage(systemName: symbolName)
-        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-        configuration.baseForegroundColor = AppColor.textPrimary
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(
+            pointSize: style == .plain ? 15 : 16,
+            weight: .semibold
+        )
+        configuration.baseForegroundColor = foregroundColor
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+        if style == .soft {
+            configuration.background.backgroundColor = AppColor.iconSurface
+            configuration.background.cornerRadius = 18
+        }
         self.configuration = configuration
         accessibilityIdentifier = "iconActionButton.\(symbolName)"
-        tintColor = AppColor.textPrimary
+        tintColor = foregroundColor
     }
 }
 
 final class SearchInputView: UIControl, UITextFieldDelegate {
-    private let containerView = CardContainerView()
+    private let containerView = UIView()
     private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
     private let textField = UITextField()
     private let placeholder: String
@@ -85,9 +112,15 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
     init(placeholder: String) {
         self.placeholder = placeholder
         super.init(frame: .zero)
+        containerView.backgroundColor = AppColor.chipFill
+        containerView.layer.cornerRadius = 16
+        containerView.layer.cornerCurve = .continuous
+        containerView.layer.borderWidth = 1
+        containerView.layer.borderColor = AppColor.line.cgColor
         iconView.tintColor = AppColor.textTertiary
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
         textField.placeholder = placeholder
-        textField.font = AppTypography.caption
+        textField.font = AppTypography.body
         textField.textColor = AppColor.textPrimary
         textField.returnKeyType = .search
         textField.delegate = self
@@ -101,7 +134,7 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            containerView.heightAnchor.constraint(equalToConstant: 48),
+            containerView.heightAnchor.constraint(equalToConstant: 46),
 
             textField.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.l),
             textField.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
@@ -109,8 +142,8 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
             iconView.leadingAnchor.constraint(equalTo: textField.trailingAnchor, constant: AppSpacing.s),
             iconView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
             iconView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 18),
-            iconView.heightAnchor.constraint(equalToConstant: 18)
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16)
         ])
 
         accessibilityIdentifier = "searchInputView"
@@ -157,27 +190,29 @@ final class SearchTriggerButton: UIButton {
         configuration.image = UIImage(systemName: "magnifyingglass")
         configuration.imagePlacement = .trailing
         configuration.imagePadding = AppSpacing.s
-        configuration.baseForegroundColor = AppColor.textTertiary
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        configuration.baseForegroundColor = AppColor.textSecondary
         configuration.contentInsets = NSDirectionalEdgeInsets(
-            top: AppSpacing.m,
+            top: 12,
             leading: AppSpacing.l,
-            bottom: AppSpacing.m,
+            bottom: 12,
             trailing: AppSpacing.l
         )
-        configuration.background.backgroundColor = AppColor.surface
-        configuration.background.cornerRadius = AppRadius.medium
+        configuration.background.backgroundColor = AppColor.chipFill
+        configuration.background.strokeColor = AppColor.line
+        configuration.background.strokeWidth = 1
+        configuration.background.cornerRadius = 16
         configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
             var outgoing = incoming
-            outgoing.font = AppTypography.caption
+            outgoing.font = AppTypography.body
             return outgoing
         }
 
         self.configuration = configuration
         contentHorizontalAlignment = .fill
         titleLabel?.textAlignment = .left
-        semanticContentAttribute = .forceRightToLeft
+        semanticContentAttribute = .forceLeftToRight
         layer.cornerCurve = .continuous
-        AppShadow.applyCard(to: self)
     }
 
     required init?(coder: NSCoder) {
@@ -211,6 +246,8 @@ final class FilterChipGroupView: UIView {
             button.titleLabel?.font = AppTypography.caption
             button.layer.cornerRadius = AppRadius.small
             button.layer.cornerCurve = .continuous
+            button.layer.borderWidth = 1
+            button.layer.borderColor = AppColor.line.cgColor
             button.tag = buttons.count
             button.addTarget(self, action: #selector(handleTap(_:)), for: .touchUpInside)
             stackView.addArrangedSubview(button)
@@ -228,10 +265,10 @@ final class FilterChipGroupView: UIView {
         selectedOption = option
         for (index, button) in buttons.enumerated() {
             let isSelected = options[index] == option
-            button.backgroundColor = isSelected ? AppColor.textPrimary : AppColor.surface
-            button.setTitleColor(isSelected ? .white : AppColor.textPrimary, for: .normal)
+            button.backgroundColor = isSelected ? AppColor.accentSurface : AppColor.surface
+            button.setTitleColor(isSelected ? AppColor.accent : AppColor.textSecondary, for: .normal)
             button.layer.borderWidth = isSelected ? 0 : 1
-            button.layer.borderColor = AppColor.line.cgColor
+            button.layer.borderColor = isSelected ? UIColor.clear.cgColor : AppColor.line.cgColor
         }
     }
 
@@ -248,7 +285,7 @@ final class StatusBadgeView: UIView {
     init(content: BadgeContent) {
         super.init(frame: .zero)
         backgroundColor = toneColor(content.tone).background
-        layer.cornerRadius = 10
+        layer.cornerRadius = 9
         layer.cornerCurve = .continuous
 
         label.text = content.title
@@ -258,10 +295,10 @@ final class StatusBadgeView: UIView {
         label.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 3),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3)
         ])
     }
 
@@ -272,15 +309,15 @@ final class StatusBadgeView: UIView {
     private func toneColor(_ tone: BadgeContent.Tone) -> (foreground: UIColor, background: UIColor) {
         switch tone {
         case .blue:
-            return (AppColor.accent, UIColor(hex: 0xEAF2FF))
+            return (AppColor.accent, AppColor.accentSurface)
         case .green:
-            return (AppColor.success, UIColor(hex: 0xEAF7ED))
+            return (AppColor.success, AppColor.successSurface)
         case .red:
-            return (AppColor.danger, UIColor(hex: 0xFDEBEC))
+            return (AppColor.danger, AppColor.dangerSurface)
         case .yellow:
-            return (UIColor(hex: 0xA16A00), UIColor(hex: 0xFFF4CC))
+            return (UIColor(hex: 0x9B6608), AppColor.warningSurface)
         case .gray:
-            return (AppColor.textSecondary, UIColor(hex: 0xF2F4F6))
+            return (AppColor.textSecondary, AppColor.chipFill)
         }
     }
 }
@@ -300,9 +337,10 @@ final class InlineToggleView: UIControl {
 
     init(title: String) {
         super.init(frame: .zero)
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         titleLabel.text = title
-        titleLabel.font = AppTypography.tiny
-        titleLabel.textColor = AppColor.textTertiary
+        titleLabel.font = AppTypography.caption
+        titleLabel.textColor = AppColor.textSecondary
 
         let stackView = UIStackView(arrangedSubviews: [iconView, titleLabel])
         stackView.axis = .horizontal
@@ -332,7 +370,7 @@ final class SectionHeaderView: UIView {
     init(title: String, accessoryView: UIView? = nil) {
         super.init(frame: .zero)
         titleLabel.text = title
-        titleLabel.font = AppTypography.headline
+        titleLabel.font = AppTypography.section
         titleLabel.textColor = AppColor.textPrimary
 
         addSubviews(titleLabel, accessoryContainer)
@@ -359,17 +397,21 @@ final class SectionHeaderView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    func updateTitle(_ title: String) {
+        titleLabel.text = title
+    }
 }
 
 final class NavigationHeaderView: UIView {
-    let backButton = IconActionButton(symbolName: "arrow.left", accessibilityLabel: "뒤로가기")
+    let backButton = IconActionButton(symbolName: "chevron.left", accessibilityLabel: "뒤로가기")
     private let titleLabel = UILabel()
     private let dividerView = UIView()
 
     init(title: String, showsDivider: Bool = true) {
         super.init(frame: .zero)
         titleLabel.text = title
-        titleLabel.font = AppTypography.hero
+        titleLabel.font = AppTypography.title
         titleLabel.textColor = AppColor.textPrimary
 
         dividerView.backgroundColor = AppColor.line
@@ -383,14 +425,14 @@ final class NavigationHeaderView: UIView {
         NSLayoutConstraint.activate([
             backButton.topAnchor.constraint(equalTo: topAnchor),
             backButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            backButton.widthAnchor.constraint(equalToConstant: 44),
-            backButton.heightAnchor.constraint(equalToConstant: 44),
+            backButton.widthAnchor.constraint(equalToConstant: 32),
+            backButton.heightAnchor.constraint(equalToConstant: 32),
 
             titleLabel.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: AppSpacing.m),
+            titleLabel.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: AppSpacing.s),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
 
-            dividerView.topAnchor.constraint(equalTo: backButton.bottomAnchor, constant: AppSpacing.m),
+            dividerView.topAnchor.constraint(equalTo: backButton.bottomAnchor, constant: AppSpacing.s),
             dividerView.leadingAnchor.constraint(equalTo: leadingAnchor),
             dividerView.trailingAnchor.constraint(equalTo: trailingAnchor),
             dividerView.heightAnchor.constraint(equalToConstant: 1),
@@ -421,12 +463,12 @@ final class EmptyStateView: UIView {
 
         let stackView = UIStackView(arrangedSubviews: [titleLabel, messageLabel])
         stackView.axis = .vertical
-        stackView.spacing = AppSpacing.s
+        stackView.spacing = AppSpacing.xs
         stackView.alignment = .center
 
         addSubview(stackView)
         stackView.translatesAutoresizingMaskIntoConstraints = false
-        stackView.pinEdges(to: self, insets: UIEdgeInsets(top: 32, left: 16, bottom: 32, right: 16))
+        stackView.pinEdges(to: self, insets: UIEdgeInsets(top: 40, left: 20, bottom: 40, right: 20))
     }
 
     required init?(coder: NSCoder) {
@@ -455,15 +497,15 @@ final class UnderlineSegmentControlView: UIView {
         titles.enumerated().forEach { index, title in
             let button = UIButton(type: .system)
             button.setTitle(title, for: .normal)
-            button.titleLabel?.font = AppTypography.body
-            button.setTitleColor(AppColor.textTertiary, for: .normal)
+            button.titleLabel?.font = AppTypography.subheadline
+            button.setTitleColor(AppColor.textSecondary, for: .normal)
             button.tag = index
             button.addTarget(self, action: #selector(handleTap(_:)), for: .touchUpInside)
             stackView.addArrangedSubview(button)
             buttons.append(button)
         }
 
-        indicatorView.backgroundColor = AppColor.textPrimary
+        indicatorView.backgroundColor = AppColor.accent
         indicatorView.layer.cornerRadius = 1
 
         NSLayoutConstraint.activate([
@@ -499,7 +541,7 @@ final class UnderlineSegmentControlView: UIView {
         selectedIndex = index
         buttons.enumerated().forEach { idx, button in
             let isSelected = idx == index
-            button.setTitleColor(isSelected ? AppColor.textPrimary : AppColor.textTertiary, for: .normal)
+            button.setTitleColor(isSelected ? AppColor.textPrimary : AppColor.textSecondary, for: .normal)
         }
 
         setNeedsLayout()
@@ -532,7 +574,7 @@ final class CollectionSectionHeaderView: UICollectionReusableView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        titleLabel.font = AppTypography.headline
+        titleLabel.font = AppTypography.section
         titleLabel.textColor = AppColor.textPrimary
         addSubview(titleLabel)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false

@@ -7,14 +7,79 @@
 
 import UIKit
 
+final class MockBookCoverView: UIView {
+    private let gradientLayer = CAGradientLayer()
+    private let iconView = UIImageView(image: UIImage(systemName: "book.closed.fill"))
+    private let accentCircle = UIView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        layer.insertSublayer(gradientLayer, at: 0)
+        layer.cornerCurve = .continuous
+        layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        clipsToBounds = true
+
+        accentCircle.layer.cornerCurve = .continuous
+        accentCircle.alpha = 0.22
+        iconView.tintColor = UIColor.white.withAlphaComponent(0.95)
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30, weight: .regular)
+
+        addSubviews(accentCircle, iconView)
+        accentCircle.translatesAutoresizingMaskIntoConstraints = false
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            accentCircle.widthAnchor.constraint(equalToConstant: 96),
+            accentCircle.heightAnchor.constraint(equalToConstant: 96),
+            accentCircle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 28),
+            accentCircle.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 32),
+
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.l),
+            iconView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -AppSpacing.l)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        gradientLayer.frame = bounds
+        layer.cornerRadius = AppRadius.medium
+        accentCircle.layer.cornerRadius = accentCircle.bounds.width / 2
+    }
+
+    func configure(seed: String) {
+        let palettes: [[UIColor]] = [
+            [UIColor(hex: 0x5B8CFF), UIColor(hex: 0x8DB8FF)],
+            [UIColor(hex: 0x2D4E86), UIColor(hex: 0x5D7EB3)],
+            [UIColor(hex: 0x2F9E9B), UIColor(hex: 0x67C4C1)],
+            [UIColor(hex: 0x7A5AF8), UIColor(hex: 0xA48BFF)],
+            [UIColor(hex: 0xF58A4B), UIColor(hex: 0xFFC289)],
+            [UIColor(hex: 0xE35D93), UIColor(hex: 0xF3A3C4)]
+        ]
+        let paletteIndex = seed.unicodeScalars.reduce(0) { partialResult, scalar in
+            partialResult + Int(scalar.value)
+        } % palettes.count
+        let colors = palettes[paletteIndex]
+        gradientLayer.colors = colors.map(\.cgColor)
+        gradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        gradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        accentCircle.backgroundColor = UIColor.white
+    }
+}
+
 final class BookCarouselCell: UICollectionViewCell {
     static let reuseIdentifier = "BookCarouselCell"
 
     private let containerView = CardContainerView()
-    private let coverView = UIView()
+    private let coverView = MockBookCoverView()
     private let titleLabel = UILabel()
     private let authorLabel = UILabel()
-    private let actionIcon = UIImageView(image: UIImage(systemName: "doc.text.viewfinder"))
+    private let detailButton = UIButton(type: .system)
+
+    var onDetailTap: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -22,42 +87,52 @@ final class BookCarouselCell: UICollectionViewCell {
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.pinEdges(to: contentView)
 
-        coverView.backgroundColor = AppColor.elevated
-        coverView.layer.cornerRadius = AppRadius.medium
-        coverView.layer.cornerCurve = .continuous
-
         titleLabel.font = AppTypography.subheadline
         titleLabel.textColor = AppColor.textPrimary
+        titleLabel.numberOfLines = 2
         authorLabel.font = AppTypography.caption
         authorLabel.textColor = AppColor.textSecondary
-        actionIcon.tintColor = AppColor.textSecondary
+        detailButton.accessibilityIdentifier = "bookCarouselCell.detailButton"
+        detailButton.accessibilityLabel = "책 상세 정보"
+        detailButton.showsMenuAsPrimaryAction = false
+        detailButton.layer.cornerCurve = .continuous
 
-        containerView.addSubviews(coverView, titleLabel, authorLabel, actionIcon)
-        [coverView, titleLabel, authorLabel, actionIcon].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "doc.text.viewfinder")
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        configuration.baseForegroundColor = UIColor.white.withAlphaComponent(0.92)
+        configuration.background.backgroundColor = UIColor.white.withAlphaComponent(0.16)
+        configuration.background.cornerRadius = 12
+        configuration.contentInsets = .init(top: 6, leading: 6, bottom: 6, trailing: 6)
+        detailButton.configuration = configuration
+
+        containerView.addSubviews(coverView, titleLabel, authorLabel, detailButton)
+        [coverView, titleLabel, authorLabel, detailButton].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         NSLayoutConstraint.activate([
-            coverView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AppSpacing.l),
-            coverView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.l),
-            coverView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
-            coverView.heightAnchor.constraint(equalToConstant: 116),
+            coverView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            coverView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            coverView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            coverView.heightAnchor.constraint(equalTo: containerView.heightAnchor, multiplier: 0.69),
 
-            actionIcon.topAnchor.constraint(equalTo: coverView.topAnchor, constant: AppSpacing.s),
-            actionIcon.trailingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: -AppSpacing.s),
-            actionIcon.widthAnchor.constraint(equalToConstant: 18),
-            actionIcon.heightAnchor.constraint(equalToConstant: 18),
+            detailButton.topAnchor.constraint(equalTo: coverView.topAnchor, constant: AppSpacing.m),
+            detailButton.trailingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: -AppSpacing.m),
+            detailButton.widthAnchor.constraint(equalToConstant: 28),
+            detailButton.heightAnchor.constraint(equalToConstant: 28),
 
-            titleLabel.topAnchor.constraint(equalTo: coverView.bottomAnchor, constant: AppSpacing.l),
-            titleLabel.leadingAnchor.constraint(equalTo: coverView.leadingAnchor),
-            titleLabel.trailingAnchor.constraint(equalTo: coverView.trailingAnchor),
+            titleLabel.topAnchor.constraint(equalTo: coverView.bottomAnchor, constant: AppSpacing.m),
+            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.m),
+            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.m),
 
             authorLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.xs),
-            authorLabel.leadingAnchor.constraint(equalTo: coverView.leadingAnchor),
-            authorLabel.trailingAnchor.constraint(equalTo: coverView.trailingAnchor),
-            authorLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l)
+            authorLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            authorLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            authorLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.m)
         ])
 
-        containerView.layer.borderWidth = 1
-        containerView.layer.borderColor = AppColor.line.cgColor
+        detailButton.addAction(UIAction { [weak self] _ in
+            self?.onDetailTap?()
+        }, for: .touchUpInside)
         accessibilityIdentifier = "bookCarouselCell"
     }
 
@@ -65,11 +140,29 @@ final class BookCarouselCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onDetailTap = nil
+    }
+
     func configure(viewData: BookCarouselItemViewData) {
         titleLabel.text = viewData.title
         authorLabel.text = viewData.subtitle
-        containerView.layer.borderColor = (viewData.isFeatured ? AppColor.textPrimary : AppColor.line).cgColor
-        containerView.layer.borderWidth = viewData.isFeatured ? 2 : 1
+        coverView.configure(seed: viewData.id)
+        let borderColor: UIColor
+        let borderWidth: CGFloat
+        if viewData.isSelected {
+            borderColor = AppColor.accent
+            borderWidth = 2
+        } else if viewData.isFeatured {
+            borderColor = AppColor.accent
+            borderWidth = 1.5
+        } else {
+            borderColor = AppColor.line
+            borderWidth = 1
+        }
+        containerView.layer.borderColor = borderColor.cgColor
+        containerView.layer.borderWidth = borderWidth
     }
 }
 
@@ -95,15 +188,16 @@ final class LibraryCardCell: UICollectionViewCell {
 
         titleLabel.font = AppTypography.subheadline
         titleLabel.textColor = AppColor.textPrimary
+        titleLabel.numberOfLines = 2
         distanceLabel.font = AppTypography.body
         distanceLabel.textColor = AppColor.textPrimary
 
         badgeStack.axis = .horizontal
-        badgeStack.spacing = AppSpacing.xs
+        badgeStack.spacing = AppSpacing.s
         badgeStack.alignment = .center
 
         actionsStack.axis = .horizontal
-        actionsStack.spacing = AppSpacing.s
+        actionsStack.spacing = 2
         actionsStack.alignment = .center
         actionsStack.addArrangedSubview(bellButton)
         actionsStack.addArrangedSubview(heartButton)
@@ -119,7 +213,7 @@ final class LibraryCardCell: UICollectionViewCell {
             actionsStack.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             actionsStack.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
 
-            distanceLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.m),
+            distanceLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
             distanceLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             distanceLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
             distanceLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l),
@@ -158,8 +252,10 @@ final class LibraryCardCell: UICollectionViewCell {
         bellButton.isHidden = viewData.showsBell == false
         bellButton.setSymbolName(viewData.isBellActive ? "bell.fill" : "bell")
         bellButton.accessibilityLabel = viewData.isBellActive ? "알림 해제" : "알림 설정"
+        bellButton.setForegroundColor(viewData.isBellActive ? AppColor.accent : AppColor.textTertiary)
         heartButton.setSymbolName(viewData.isFavorite ? "heart.fill" : "heart")
         heartButton.accessibilityLabel = viewData.isFavorite ? "찜 해제" : "찜하기"
+        heartButton.setForegroundColor(viewData.isFavorite ? AppColor.heart : AppColor.textTertiary)
 
         for badge in viewData.badges {
             badgeStack.addArrangedSubview(StatusBadgeView(content: badge))
@@ -182,13 +278,14 @@ class BookInfoCardCell: UICollectionViewCell {
 
         titleLabel.font = AppTypography.subheadline
         titleLabel.textColor = AppColor.textPrimary
+        titleLabel.numberOfLines = 2
         subtitleLabel.font = AppTypography.caption
         subtitleLabel.textColor = AppColor.textSecondary
 
         badgeStack.axis = .horizontal
-        badgeStack.spacing = AppSpacing.xs
+        badgeStack.spacing = AppSpacing.s
         actionsStack.axis = .horizontal
-        actionsStack.spacing = AppSpacing.s
+        actionsStack.spacing = 2
         actionsStack.alignment = .center
 
         containerView.addSubviews(titleLabel, subtitleLabel, badgeStack, actionsStack)
@@ -206,7 +303,7 @@ class BookInfoCardCell: UICollectionViewCell {
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
 
-            badgeStack.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: AppSpacing.m),
+            badgeStack.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: AppSpacing.l),
             badgeStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             badgeStack.trailingAnchor.constraint(lessThanOrEqualTo: containerView.trailingAnchor, constant: -AppSpacing.l),
             badgeStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l)
@@ -269,8 +366,10 @@ final class FavoriteBookCell: BookInfoCardCell {
         configure(title: viewData.title, subtitle: viewData.subtitle, badges: viewData.badges)
         bellButton.setSymbolName(viewData.isAlertEnabled ? "bell.fill" : "bell")
         bellButton.accessibilityLabel = viewData.isAlertEnabled ? "알림 해제" : "알림 설정"
+        bellButton.setForegroundColor(viewData.isAlertEnabled ? AppColor.accent : AppColor.textTertiary)
         heartButton.setSymbolName(viewData.isFavorite ? "heart.fill" : "heart")
         heartButton.accessibilityLabel = viewData.isFavorite ? "찜 해제" : "찜하기"
+        heartButton.setForegroundColor(viewData.isFavorite ? AppColor.heart : AppColor.textTertiary)
     }
 }
 
@@ -302,5 +401,6 @@ final class AlertBookCell: BookInfoCardCell {
         configure(title: viewData.title, subtitle: viewData.subtitle, badges: viewData.badges)
         bellButton.setSymbolName(viewData.isAlertEnabled ? "bell.fill" : "bell")
         bellButton.accessibilityLabel = viewData.isAlertEnabled ? "알림 해제" : "알림 설정"
+        bellButton.setForegroundColor(viewData.isAlertEnabled ? AppColor.accent : AppColor.textTertiary)
     }
 }

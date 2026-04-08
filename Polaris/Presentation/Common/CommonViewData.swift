@@ -12,12 +12,14 @@ struct BookCarouselItemViewData: Identifiable, Hashable, Sendable {
     let title: String
     let subtitle: String
     let isFeatured: Bool
+    let isSelected: Bool
 
     static func == (lhs: BookCarouselItemViewData, rhs: BookCarouselItemViewData) -> Bool {
         lhs.id == rhs.id &&
         lhs.title == rhs.title &&
         lhs.subtitle == rhs.subtitle &&
-        lhs.isFeatured == rhs.isFeatured
+        lhs.isFeatured == rhs.isFeatured &&
+        lhs.isSelected == rhs.isSelected
     }
 
     func hash(into hasher: inout Hasher) {
@@ -25,6 +27,7 @@ struct BookCarouselItemViewData: Identifiable, Hashable, Sendable {
         hasher.combine(title)
         hasher.combine(subtitle)
         hasher.combine(isFeatured)
+        hasher.combine(isSelected)
     }
 }
 

@@ -69,13 +69,16 @@ private final class ProfileView: UIView {
 
         let profileCard = CardContainerView()
         let avatarView = UIView()
+        let avatarIconView = UIImageView(image: UIImage(systemName: "person.crop.circle.fill"))
         let infoStack = UIStackView()
         let comingSoonCard = CardContainerView()
         let comingSoonLabel = UILabel()
 
-        avatarView.backgroundColor = AppColor.elevated
+        avatarView.backgroundColor = AppColor.accentSurface
         avatarView.layer.cornerRadius = 38
         avatarView.layer.cornerCurve = .continuous
+        avatarIconView.tintColor = AppColor.accent
+        avatarIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 34, weight: .regular)
 
         nameLabel.font = AppTypography.hero
         nameLabel.textColor = AppColor.textPrimary
@@ -102,17 +105,18 @@ private final class ProfileView: UIView {
         [headerView, profileCard, comingSoonCard].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         profileCard.addSubviews(avatarView, infoStack, headlineLabel)
-        [avatarView, infoStack, headlineLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        avatarView.addSubview(avatarIconView)
+        [avatarView, avatarIconView, infoStack, headlineLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         comingSoonCard.addSubview(comingSoonLabel)
         comingSoonLabel.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
+            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            profileCard.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xxl),
+            profileCard.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xl),
             profileCard.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             profileCard.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
 
@@ -120,6 +124,9 @@ private final class ProfileView: UIView {
             avatarView.leadingAnchor.constraint(equalTo: profileCard.leadingAnchor, constant: AppSpacing.l),
             avatarView.widthAnchor.constraint(equalToConstant: 76),
             avatarView.heightAnchor.constraint(equalToConstant: 76),
+
+            avatarIconView.centerXAnchor.constraint(equalTo: avatarView.centerXAnchor),
+            avatarIconView.centerYAnchor.constraint(equalTo: avatarView.centerYAnchor),
 
             infoStack.topAnchor.constraint(equalTo: avatarView.topAnchor, constant: AppSpacing.xs),
             infoStack.leadingAnchor.constraint(equalTo: avatarView.trailingAnchor, constant: AppSpacing.l),

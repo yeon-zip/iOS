@@ -21,6 +21,12 @@ private enum MockFixture {
         LibrarySummary(id: "library-suseo", name: "수서 도서관", address: "서울특별시 강남구 수서동 11-7", phone: "02-3333-3333", distanceText: "2.4km", operatingStatus: .open, loanStatus: nil, isFavorite: false, isAlertEnabled: false)
     ]
 
+    static let bookHoldings: [String: Set<String>] = [
+        "book-arond-1": ["library-gangnam", "library-daechi"],
+        "book-arond-2": ["library-gangnam", "library-yeoksam"],
+        "book-arond-3": ["library-daechi", "library-suseo"]
+    ]
+
     static let alerts: [AlertItem] = [
         AlertItem(id: "alert-1", section: .available, book: BookSummary(id: "alert-book-1", title: "아몬드", author: "김철수", publisher: "인사이트", year: "2024", isFavorite: true, isAlertEnabled: true, loanStatus: .available)),
         AlertItem(id: "alert-2", section: .waiting, book: BookSummary(id: "alert-book-2", title: "아몬드", author: "김철수", publisher: "인사이트", year: "2024", isFavorite: false, isAlertEnabled: true, loanStatus: .notificationReady))
@@ -110,11 +116,12 @@ struct MockLibraryRepository: LibraryRepository {
         return filteredByDistance
     }
 
-    func fetchNearbyLibraries(query: SearchQuery) async -> [LibrarySummary] {
-        let filtered = MockFixture.libraries.filter { library in
-            query.text.isEmpty ||
-            library.name.localizedCaseInsensitiveContains(query.text) ||
-            library.address.localizedCaseInsensitiveContains(query.text)
+    func fetchNearbyLibraries(query: SearchQuery, selectedBookID: String?) async -> [LibrarySummary] {
+        let filtered: [LibrarySummary]
+        if let selectedBookID, let libraryIDs = MockFixture.bookHoldings[selectedBookID] {
+            filtered = MockFixture.libraries.filter { libraryIDs.contains($0.id) }
+        } else {
+            filtered = MockFixture.libraries
         }
 
         if query.excludeUnavailable {

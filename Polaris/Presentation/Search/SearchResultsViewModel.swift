@@ -11,6 +11,7 @@ import Foundation
 final class SearchResultsViewModel {
     struct State: Equatable {
         var query = SearchQuery(text: "", excludeUnavailable: false)
+        var selectedBookID: String?
         var books: [BookCarouselItemViewData] = []
         var libraries: [LibraryCardItemViewData] = []
     }
@@ -40,6 +41,16 @@ final class SearchResultsViewModel {
     @discardableResult
     func didSubmitQuery(_ query: String) -> Task<Void, Never> {
         state.query.text = query
+        state.selectedBookID = nil
+        state.books = state.books.map { item in
+            BookCarouselItemViewData(
+                id: item.id,
+                title: item.title,
+                subtitle: item.subtitle,
+                isFeatured: item.isFeatured,
+                isSelected: false
+            )
+        }
         onStateChange?(state)
         return scheduleRefresh()
     }
@@ -51,7 +62,23 @@ final class SearchResultsViewModel {
         return scheduleRefresh()
     }
 
-    func didSelectBook(id: String) {
+    @discardableResult
+    func didSelectBook(id: String) -> Task<Void, Never> {
+        state.selectedBookID = id
+        state.books = state.books.map { item in
+            BookCarouselItemViewData(
+                id: item.id,
+                title: item.title,
+                subtitle: item.subtitle,
+                isFeatured: item.isFeatured,
+                isSelected: item.id == id
+            )
+        }
+        onStateChange?(state)
+        return scheduleRefresh()
+    }
+
+    func didTapBookDetail(id: String) {
         onRoute?(.bookDetail(id: id))
     }
 
@@ -90,7 +117,7 @@ final class SearchResultsViewModel {
     }
 
     private var currentRequest: SearchResultsRequest {
-        SearchResultsRequest(query: state.query)
+        SearchResultsRequest(query: state.query, selectedBookID: state.selectedBookID)
     }
 
     private func scheduleRefresh() -> Task<Void, Never> {
@@ -107,21 +134,31 @@ final class SearchResultsViewModel {
     }
 
     private func refresh(request: SearchResultsRequest, generation: Int?) async {
-        async let books = searchRepository.searchBooks(query: request.query.text)
-        async let libraries = libraryRepository.fetchNearbyLibraries(query: request.query)
-        let fetchedBooks = await books
-        let fetchedLibraries = await libraries
+        let fetchedBooks = await searchRepository.searchBooks(query: request.query.text)
+        let effectiveSelectedBookID: String?
+        if let selectedBookID = request.selectedBookID,
+           fetchedBooks.contains(where: { $0.id == selectedBookID }) {
+            effectiveSelectedBookID = selectedBookID
+        } else {
+            effectiveSelectedBookID = nil
+        }
+        let fetchedLibraries = await libraryRepository.fetchNearbyLibraries(
+            query: request.query,
+            selectedBookID: effectiveSelectedBookID
+        )
         guard Task.isCancelled == false else { return }
         if let generation {
             guard generation == refreshGeneration, request == currentRequest else { return }
         }
 
+        state.selectedBookID = effectiveSelectedBookID
         state.books = fetchedBooks.enumerated().map { index, book in
             BookCarouselItemViewData(
                 id: book.id,
                 title: book.title,
                 subtitle: "저자: \(book.author)",
-                isFeatured: index == 0
+                isFeatured: index == 0,
+                isSelected: book.id == effectiveSelectedBookID
             )
         }
         state.libraries = fetchedLibraries.map { library in
@@ -145,4 +182,5 @@ final class SearchResultsViewModel {
 
 private struct SearchResultsRequest: Equatable {
     let query: SearchQuery
+    let selectedBookID: String?
 }

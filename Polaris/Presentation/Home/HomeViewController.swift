@@ -101,9 +101,9 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate {
 
 private final class HomeView: UIView {
     let locationLabel = UILabel()
-    let likeButton = IconActionButton(symbolName: "heart", accessibilityLabel: "찜 화면 열기")
-    let alertButton = IconActionButton(symbolName: "bell", accessibilityLabel: "알림 화면 열기")
-    let profileButton = IconActionButton(symbolName: "person.crop.circle", accessibilityLabel: "프로필 화면 열기")
+    let likeButton = IconActionButton(symbolName: "heart", style: .soft, accessibilityLabel: "찜 화면 열기")
+    let alertButton = IconActionButton(symbolName: "bell", style: .soft, accessibilityLabel: "알림 화면 열기")
+    let profileButton = IconActionButton(symbolName: "person.crop.circle", style: .soft, accessibilityLabel: "프로필 화면 열기")
     let searchButton = SearchTriggerButton(placeholder: "도서명, 저자, 출판사 검색")
     let distanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .oneKm)
     let excludeToggle = InlineToggleView(title: "운영종료 제외")
@@ -114,12 +114,12 @@ private final class HomeView: UIView {
         super.init(frame: frame)
         backgroundColor = AppColor.background
 
-        locationLabel.font = AppTypography.body
+        locationLabel.font = AppTypography.headline
         locationLabel.textColor = AppColor.textPrimary
 
         let actionStack = UIStackView(arrangedSubviews: [likeButton, alertButton, profileButton])
         actionStack.axis = .horizontal
-        actionStack.spacing = AppSpacing.s
+        actionStack.spacing = 6
         actionStack.alignment = .center
 
         let distanceHeader = SectionHeaderView(title: "검색 반경")
@@ -133,7 +133,7 @@ private final class HomeView: UIView {
         }
 
         NSLayoutConstraint.activate([
-            locationLabel.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xxl),
+            locationLabel.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
             locationLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
 
             actionStack.centerYAnchor.constraint(equalTo: locationLabel.centerYAnchor),
@@ -142,18 +142,18 @@ private final class HomeView: UIView {
             searchButton.topAnchor.constraint(equalTo: locationLabel.bottomAnchor, constant: AppSpacing.l),
             searchButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             searchButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
-            searchButton.heightAnchor.constraint(equalToConstant: 48),
+            searchButton.heightAnchor.constraint(equalToConstant: 46),
 
-            distanceHeader.topAnchor.constraint(equalTo: searchButton.bottomAnchor, constant: AppSpacing.xxxl),
+            distanceHeader.topAnchor.constraint(equalTo: searchButton.bottomAnchor, constant: AppSpacing.xl),
             distanceHeader.leadingAnchor.constraint(equalTo: searchButton.leadingAnchor),
             distanceHeader.trailingAnchor.constraint(equalTo: searchButton.trailingAnchor),
 
             distanceChipView.topAnchor.constraint(equalTo: distanceHeader.bottomAnchor, constant: AppSpacing.l),
             distanceChipView.leadingAnchor.constraint(equalTo: searchButton.leadingAnchor),
             distanceChipView.trailingAnchor.constraint(equalTo: searchButton.trailingAnchor),
-            distanceChipView.heightAnchor.constraint(equalToConstant: 48),
+            distanceChipView.heightAnchor.constraint(equalToConstant: 42),
 
-            libraryHeader.topAnchor.constraint(equalTo: distanceChipView.bottomAnchor, constant: AppSpacing.xxxl),
+            libraryHeader.topAnchor.constraint(equalTo: distanceChipView.bottomAnchor, constant: AppSpacing.xl),
             libraryHeader.leadingAnchor.constraint(equalTo: searchButton.leadingAnchor),
             libraryHeader.trailingAnchor.constraint(equalTo: searchButton.trailingAnchor),
 
@@ -178,14 +178,14 @@ private final class HomeView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = AppSpacing.m
+            section.interGroupSpacing = AppSpacing.s
             section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
             return section
         }

@@ -34,9 +34,15 @@ struct PolarisTests {
         await viewModel.load()
         #expect(viewModel.state.books.count == 3)
         #expect(viewModel.state.libraries.count == 4)
+        #expect(viewModel.state.selectedBookID == nil)
+
+        await viewModel.didSelectBook(id: "book-arond-2").value
+        #expect(viewModel.state.selectedBookID == "book-arond-2")
+        #expect(viewModel.state.books.first(where: { $0.id == "book-arond-2" })?.isSelected == true)
+        #expect(viewModel.state.libraries.count == 2)
 
         await viewModel.didToggleExcludeUnavailable(true).value
-        #expect(viewModel.state.libraries.count == 3)
+        #expect(viewModel.state.libraries.count == 1)
     }
 
     @Test func likeViewModelSwitchesTabsWithoutLosingData() async throws {

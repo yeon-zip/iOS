@@ -38,6 +38,7 @@ final class BookDetailViewController: UIViewController {
 
     private func render(_ state: BookDetailViewModel.State) {
         guard let detail = state.detail else { return }
+        contentView.coverView.configure(seed: detail.id)
         contentView.titleLabel.text = detail.title
         contentView.authorLabel.text = "저자: \(detail.author)"
         contentView.publisherLabel.text = "출판사: \(detail.publisher) · \(detail.year)"
@@ -46,6 +47,7 @@ final class BookDetailViewController: UIViewController {
 }
 
 private final class BookDetailView: UIView {
+    let coverView = MockBookCoverView()
     let titleLabel = UILabel()
     let authorLabel = UILabel()
     let publisherLabel = UILabel()
@@ -59,7 +61,6 @@ private final class BookDetailView: UIView {
         let scrollView = UIScrollView()
         let contentContainer = UIView()
         let metaCard = CardContainerView()
-        let coverView = UIView()
         let decisionCard = CardContainerView()
         let decisionTitle = UILabel()
         let yesButton = UIButton(type: .system)
@@ -68,47 +69,46 @@ private final class BookDetailView: UIView {
 
         titleLabel.font = AppTypography.hero
         titleLabel.textColor = AppColor.textPrimary
-        authorLabel.font = AppTypography.body
+        authorLabel.font = AppTypography.subheadline
         authorLabel.textColor = AppColor.textSecondary
-        publisherLabel.font = AppTypography.body
+        publisherLabel.font = AppTypography.caption
         publisherLabel.textColor = AppColor.textSecondary
 
         summaryTitle.text = "책 소개"
-        summaryTitle.font = AppTypography.headline
+        summaryTitle.font = AppTypography.section
         summaryTitle.textColor = AppColor.textPrimary
 
         summaryLabel.font = AppTypography.body
         summaryLabel.textColor = AppColor.textPrimary
         summaryLabel.numberOfLines = 0
 
-        coverView.backgroundColor = AppColor.elevated
-        coverView.layer.cornerRadius = AppRadius.medium
-        coverView.layer.cornerCurve = .continuous
-
         decisionTitle.text = "이 책을 구매할 가치가 있나요?"
         decisionTitle.font = AppTypography.headline
         decisionTitle.textColor = AppColor.textPrimary
 
-        [yesButton, noButton].forEach { button in
-            var configuration = UIButton.Configuration.filled()
-            configuration.cornerStyle = .capsule
-            configuration.baseBackgroundColor = AppColor.surface
-            configuration.baseForegroundColor = AppColor.textPrimary
-            configuration.background.strokeColor = AppColor.line
-            configuration.background.strokeWidth = 1
-            configuration.contentInsets = .init(top: 12, leading: 20, bottom: 12, trailing: 20)
-            button.configuration = configuration
-        }
-
-        var yesConfiguration = yesButton.configuration
-        yesConfiguration?.title = "예"
-        yesConfiguration?.image = UIImage(systemName: "hand.thumbsup")
+        var yesConfiguration = UIButton.Configuration.filled()
+        yesConfiguration.cornerStyle = .capsule
+        yesConfiguration.baseBackgroundColor = AppColor.accent
+        yesConfiguration.baseForegroundColor = .white
+        yesConfiguration.contentInsets = .init(top: 10, leading: 18, bottom: 10, trailing: 18)
+        yesConfiguration.title = "예"
+        yesConfiguration.image = UIImage(systemName: "hand.thumbsup.fill")
         yesButton.configuration = yesConfiguration
 
-        var noConfiguration = noButton.configuration
-        noConfiguration?.title = "아니오"
-        noConfiguration?.image = UIImage(systemName: "hand.thumbsdown")
+        var noConfiguration = UIButton.Configuration.filled()
+        noConfiguration.cornerStyle = .capsule
+        noConfiguration.baseBackgroundColor = AppColor.surface
+        noConfiguration.baseForegroundColor = AppColor.textSecondary
+        noConfiguration.background.strokeColor = AppColor.line
+        noConfiguration.background.strokeWidth = 1
+        noConfiguration.contentInsets = .init(top: 10, leading: 18, bottom: 10, trailing: 18)
+        noConfiguration.title = "아니오"
+        noConfiguration.image = UIImage(systemName: "hand.thumbsdown")
         noButton.configuration = noConfiguration
+
+        [yesButton, noButton].forEach { button in
+            button.layer.cornerCurve = .continuous
+        }
 
         addSubview(scrollView)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -140,8 +140,8 @@ private final class BookDetailView: UIView {
 
             coverView.topAnchor.constraint(equalTo: metaCard.topAnchor, constant: AppSpacing.l),
             coverView.leadingAnchor.constraint(equalTo: metaCard.leadingAnchor, constant: AppSpacing.l),
-            coverView.widthAnchor.constraint(equalToConstant: 104),
-            coverView.heightAnchor.constraint(equalToConstant: 144),
+            coverView.widthAnchor.constraint(equalToConstant: 112),
+            coverView.heightAnchor.constraint(equalToConstant: 156),
 
             titleLabel.topAnchor.constraint(equalTo: coverView.topAnchor),
             titleLabel.leadingAnchor.constraint(equalTo: coverView.trailingAnchor, constant: AppSpacing.l),
@@ -156,7 +156,8 @@ private final class BookDetailView: UIView {
             publisherLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
             publisherLabel.bottomAnchor.constraint(lessThanOrEqualTo: metaCard.bottomAnchor, constant: -AppSpacing.l),
 
-            metaCard.bottomAnchor.constraint(equalTo: coverView.bottomAnchor, constant: AppSpacing.l),
+            metaCard.bottomAnchor.constraint(greaterThanOrEqualTo: coverView.bottomAnchor, constant: AppSpacing.l),
+            metaCard.bottomAnchor.constraint(greaterThanOrEqualTo: publisherLabel.bottomAnchor, constant: AppSpacing.l),
 
             decisionCard.topAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: AppSpacing.l),
             decisionCard.leadingAnchor.constraint(equalTo: metaCard.leadingAnchor),

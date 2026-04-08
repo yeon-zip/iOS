@@ -58,13 +58,18 @@ final class LibraryDetailViewController: BaseViewController {
 }
 
 private final class DetailInfoRow: UIView {
+    private let iconView = UIImageView()
     private let textLabel = UILabel()
 
     init(symbolName: String, text: String) {
         super.init(frame: .zero)
 
-        let iconView = UIImageView(image: UIImage(systemName: symbolName))
+        iconView.image = UIImage(systemName: symbolName)
         iconView.tintColor = AppColor.textSecondary
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        iconView.contentMode = .scaleAspectFit
+        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
         textLabel.font = AppTypography.caption
         textLabel.textColor = AppColor.textSecondary
         textLabel.text = text
@@ -74,8 +79,13 @@ private final class DetailInfoRow: UIView {
         stackView.spacing = AppSpacing.s
         stackView.alignment = .center
         addSubview(stackView)
-        stackView.translatesAutoresizingMaskIntoConstraints = false
+        [stackView, iconView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
         stackView.pinEdges(to: self)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16)
+        ])
     }
 
     required init?(coder: NSCoder) {
@@ -104,7 +114,7 @@ private final class LibraryDetailView: UIView {
     private let regularHolidayStack = UIStackView()
     private let upcomingHolidayStack = UIStackView()
     private let addressRow = DetailInfoRow(symbolName: "mappin.and.ellipse", text: "")
-    private let phoneRow = DetailInfoRow(symbolName: "phone", text: "")
+    private let phoneRow = DetailInfoRow(symbolName: "phone.fill", text: "")
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -136,11 +146,11 @@ private final class LibraryDetailView: UIView {
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
+            headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            scrollView.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xxl),
+            scrollView.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.l),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -237,9 +247,11 @@ private final class LibraryDetailView: UIView {
     private func setupMapCard() {
         let titleLabel = makeCardTitle("위치")
         let mapPlaceholder = UIView()
-        mapPlaceholder.backgroundColor = AppColor.line
+        mapPlaceholder.backgroundColor = AppColor.iconSurface
         mapPlaceholder.layer.cornerRadius = AppRadius.medium
         mapPlaceholder.layer.cornerCurve = .continuous
+        mapPlaceholder.layer.borderWidth = 1
+        mapPlaceholder.layer.borderColor = AppColor.line.cgColor
 
         mapCard.addSubviews(titleLabel, mapPlaceholder, mapPlaceholderLabel)
         [titleLabel, mapPlaceholder, mapPlaceholderLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -332,7 +344,7 @@ private final class LibraryDetailView: UIView {
         label.textColor = AppColor.textPrimary
 
         let container = UIView()
-        container.backgroundColor = AppColor.surface
+        container.backgroundColor = AppColor.chipFill
         container.layer.cornerRadius = 12
         container.layer.cornerCurve = .continuous
         container.layer.borderWidth = 1

@@ -67,11 +67,19 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
     private func render(_ state: SearchResultsViewModel.State) {
         contentView.searchInputView.text = state.query.text
         contentView.excludeToggle.isSelected = state.query.excludeUnavailable
+        contentView.updateLibraryHeaderTitle(
+            state.selectedBookID == nil ? "주변 도서관" : "주변 보유 도서관"
+        )
         contentView.booksCollectionView.backgroundView = state.books.isEmpty
             ? EmptyStateView(title: "도서를 찾지 못했어요", message: "도서명이나 저자를 조금 다르게 입력해보세요.")
             : nil
         contentView.librariesCollectionView.backgroundView = state.libraries.isEmpty
-            ? EmptyStateView(title: "도서관 결과가 없어요", message: "검색어나 대출 가능 필터를 조정해보세요.")
+            ? EmptyStateView(
+                title: state.selectedBookID == nil ? "도서관 결과가 없어요" : "보유 도서관이 없어요",
+                message: state.selectedBookID == nil
+                    ? "검색어나 대출 가능 필터를 조정해보세요."
+                    : "다른 책을 선택하거나 대출 가능 필터를 조정해보세요."
+            )
             : nil
 
         var bookSnapshot = NSDiffableDataSourceSnapshot<Int, BookCarouselItemViewData>()
@@ -86,8 +94,11 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
     }
 
     private func makeBooksDataSource() -> UICollectionViewDiffableDataSource<Int, BookCarouselItemViewData> {
-        let registration = UICollectionView.CellRegistration<BookCarouselCell, BookCarouselItemViewData> { cell, _, item in
+        let registration = UICollectionView.CellRegistration<BookCarouselCell, BookCarouselItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
+            cell.onDetailTap = { [weak self] in
+                self?.viewModel.didTapBookDetail(id: item.id)
+            }
         }
 
         return UICollectionViewDiffableDataSource(collectionView: contentView.booksCollectionView) { collectionView, indexPath, itemIdentifier in
@@ -114,7 +125,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         if collectionView == contentView.booksCollectionView,
            let book = booksDataSource.itemIdentifier(for: indexPath) {
-            viewModel.didSelectBook(id: book.id)
+            _ = viewModel.didSelectBook(id: book.id)
         } else if collectionView == contentView.librariesCollectionView,
                   let library = librariesDataSource.itemIdentifier(for: indexPath) {
             viewModel.didSelectLibrary(id: library.id)
@@ -123,15 +134,17 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
 }
 
 private final class SearchResultsView: UIView {
-    let backButton = IconActionButton(symbolName: "arrow.left", accessibilityLabel: "뒤로가기")
+    let backButton = IconActionButton(symbolName: "chevron.left", accessibilityLabel: "뒤로가기")
     let searchInputView = SearchInputView(placeholder: "도서명, 저자, 출판사 검색")
     let booksCollectionView: UICollectionView
     let librariesCollectionView: UICollectionView
     let excludeToggle = InlineToggleView(title: "대출불가 제외")
+    private let libraryHeader: SectionHeaderView
 
     override init(frame: CGRect) {
         booksCollectionView = UICollectionView(frame: .zero, collectionViewLayout: SearchResultsView.makeBooksLayout())
         librariesCollectionView = UICollectionView(frame: .zero, collectionViewLayout: SearchResultsView.makeLibrariesLayout())
+        libraryHeader = SectionHeaderView(title: "주변 도서관", accessoryView: excludeToggle)
         super.init(frame: frame)
 
         backgroundColor = AppColor.background
@@ -143,27 +156,25 @@ private final class SearchResultsView: UIView {
         searchHeaderStack.spacing = AppSpacing.l
         searchHeaderStack.alignment = .center
 
-        let libraryHeader = SectionHeaderView(title: "주변 도서관", accessoryView: excludeToggle)
-
         addSubviews(searchHeaderStack, booksCollectionView, libraryHeader, librariesCollectionView)
         [searchHeaderStack, booksCollectionView, libraryHeader, librariesCollectionView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
         NSLayoutConstraint.activate([
-            backButton.widthAnchor.constraint(equalToConstant: 44),
-            backButton.heightAnchor.constraint(equalToConstant: 44),
+            backButton.widthAnchor.constraint(equalToConstant: 32),
+            backButton.heightAnchor.constraint(equalToConstant: 32),
 
-            searchHeaderStack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xxl),
+            searchHeaderStack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             searchHeaderStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             searchHeaderStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            booksCollectionView.topAnchor.constraint(equalTo: searchHeaderStack.bottomAnchor, constant: AppSpacing.xxl),
+            booksCollectionView.topAnchor.constraint(equalTo: searchHeaderStack.bottomAnchor, constant: AppSpacing.xl),
             booksCollectionView.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
-            booksCollectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            booksCollectionView.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
             booksCollectionView.heightAnchor.constraint(equalToConstant: 220),
 
-            libraryHeader.topAnchor.constraint(equalTo: booksCollectionView.bottomAnchor, constant: AppSpacing.xxxl),
+            libraryHeader.topAnchor.constraint(equalTo: booksCollectionView.bottomAnchor, constant: AppSpacing.xl),
             libraryHeader.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
             libraryHeader.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
 
@@ -183,20 +194,24 @@ private final class SearchResultsView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    func updateLibraryHeaderTitle(_ title: String) {
+        libraryHeader.updateTitle(title)
+    }
+
     private static func makeBooksLayout() -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
-                widthDimension: .absolute(132),
-                heightDimension: .absolute(204)
+                widthDimension: .absolute(144),
+                heightDimension: .absolute(216)
             ))
             let group = NSCollectionLayoutGroup.horizontal(layoutSize: .init(
-                widthDimension: .absolute(132),
-                heightDimension: .absolute(204)
+                widthDimension: .absolute(144),
+                heightDimension: .absolute(216)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
             section.orthogonalScrollingBehavior = .continuousGroupLeadingBoundary
             section.interGroupSpacing = AppSpacing.m
-            section.contentInsets = .init(top: 0, leading: AppSpacing.xxl, bottom: 0, trailing: AppSpacing.xxl)
+            section.contentInsets = .zero
             return section
         }
     }
@@ -205,14 +220,14 @@ private final class SearchResultsView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(108)
+                heightDimension: .estimated(96)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = AppSpacing.m
+            section.interGroupSpacing = AppSpacing.s
             section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
             return section
         }
