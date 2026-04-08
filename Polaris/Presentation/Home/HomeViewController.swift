@@ -125,6 +125,11 @@ private final class HomeView: UIView {
         actionStack.axis = .horizontal
         actionStack.spacing = 6
         actionStack.alignment = .center
+        actionStack.setContentHuggingPriority(.required, for: .horizontal)
+        actionStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        locationButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        locationButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let distanceHeader = SectionHeaderView(title: "검색 반경")
         let libraryHeader = SectionHeaderView(title: "주변 도서관", accessoryView: excludeToggle)
@@ -140,6 +145,7 @@ private final class HomeView: UIView {
             locationButton.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
             locationButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             locationButton.trailingAnchor.constraint(lessThanOrEqualTo: actionStack.leadingAnchor, constant: -AppSpacing.m),
+            locationButton.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.58),
 
             actionStack.centerYAnchor.constraint(equalTo: locationButton.centerYAnchor),
             actionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
