@@ -28,9 +28,13 @@ final class AppNavigator {
 
     func handle(_ route: AppRoute, from source: UIViewController) {
         switch route {
-        case let .search(currentLocation, currentDistance):
+        case let .search(currentLocation, currentDistance, initialQuery):
             navigationController.pushViewController(
-                makeSearch(currentLocation: currentLocation, currentDistance: currentDistance),
+                makeSearch(
+                    currentLocation: currentLocation,
+                    currentDistance: currentDistance,
+                    initialQuery: initialQuery
+                ),
                 animated: true
             )
         case .likes:
@@ -89,12 +93,17 @@ final class AppNavigator {
         return LocationPickerViewController(viewModel: viewModel, onSelection: onSelection)
     }
 
-    private func makeSearch(currentLocation: AddressSuggestion, currentDistance: DistanceOption) -> SearchResultsViewController {
+    private func makeSearch(
+        currentLocation: AddressSuggestion,
+        currentDistance: DistanceOption,
+        initialQuery: String?
+    ) -> SearchResultsViewController {
         let viewModel = SearchResultsViewModel(
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
             currentLocation: currentLocation,
-            currentDistance: currentDistance
+            currentDistance: currentDistance,
+            initialQuery: initialQuery
         )
         return SearchResultsViewController(viewModel: viewModel, navigator: self)
     }

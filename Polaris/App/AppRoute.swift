@@ -8,7 +8,7 @@
 import Foundation
 
 enum AppRoute: Hashable {
-    case search(currentLocation: AddressSuggestion, currentDistance: DistanceOption)
+    case search(currentLocation: AddressSuggestion, currentDistance: DistanceOption, initialQuery: String?)
     case likes
     case alerts
     case profile

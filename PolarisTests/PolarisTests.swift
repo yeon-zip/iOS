@@ -145,7 +145,7 @@ struct PolarisTests {
         await viewModel.load()
         #expect(viewModel.state.libraries.count == 2)
 
-        await viewModel.didSelectDistance(.twentyKm).value
+        await viewModel.didSelectDistance(.tenKm).value
         #expect(viewModel.state.libraries.count == 4)
 
         await viewModel.didToggleExcludeClosed(true).value
@@ -175,7 +175,7 @@ struct PolarisTests {
                 latitude: 36.1450,
                 longitude: 128.3937
             ),
-            currentDistance: .threeKm
+            currentDistance: .twoKm
         )
 
         await viewModel.load()
@@ -191,7 +191,7 @@ struct PolarisTests {
         await viewModel.didToggleExcludeUnavailable(true).value
         #expect(viewModel.state.libraries.count == 1)
 
-        await viewModel.didSelectDistance(.twentyKm).value
+        await viewModel.didSelectDistance(.tenKm).value
         #expect(viewModel.state.libraries.count == 2)
     }
 
@@ -206,7 +206,7 @@ struct PolarisTests {
                 latitude: 36.1450,
                 longitude: 128.3937
             ),
-            currentDistance: .threeKm
+            currentDistance: .twoKm
         )
 
         await viewModel.didSubmitQuery("아몬드").value
@@ -243,7 +243,7 @@ struct PolarisTests {
                 latitude: 36.1450,
                 longitude: 128.3937
             ),
-            currentDistance: .threeKm
+            currentDistance: .twoKm
         )
 
         await viewModel.didSubmitQuery("테스트").value
@@ -276,7 +276,7 @@ struct PolarisTests {
                 latitude: 36.1450,
                 longitude: 128.3937
             ),
-            currentDistance: .threeKm
+            currentDistance: .twoKm
         )
 
         let task = viewModel.didSubmitQuery("테스트")
@@ -354,7 +354,7 @@ struct PolarisTests {
                 latitude: 37.2636,
                 longitude: 127.0286
             ),
-            distance: .twentyKm,
+            distance: .tenKm,
             query: SearchQuery(text: "아몬드", excludeUnavailable: false),
             selectedBookID: "9791198363510"
         )
@@ -425,7 +425,7 @@ struct PolarisTests {
                 latitude: 37.5665,
                 longitude: 126.9780
             ),
-            distance: .twentyKm,
+            distance: .tenKm,
             query: SearchQuery(text: "아몬드", excludeUnavailable: true),
             selectedBookID: "9791198363510"
         )
@@ -466,14 +466,14 @@ struct PolarisTests {
         for coordinate in coordinates {
             let nearbyLibraries = await libraryRepository.fetchHomeLibraries(
                 origin: coordinate,
-                distance: .twentyKm,
+                distance: .fiveKm,
                 excludeClosed: false
             )
             #expect(nearbyLibraries.isEmpty == false)
 
             let holdingLibraries = await libraryRepository.fetchNearbyLibraries(
                 origin: coordinate,
-                distance: .twentyKm,
+                distance: .fiveKm,
                 query: SearchQuery(text: "아몬드", excludeUnavailable: false),
                 selectedBookID: isbn
             )

@@ -48,8 +48,8 @@ final class ContentSizedCollectionView: UICollectionView {
 }
 
 final class LoadingOverlayView: UIView {
-    private let backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
-    private let indicatorView = UIActivityIndicatorView(style: .medium)
+    private let backgroundView = UIVisualEffectView(effect: nil)
+    private let indicatorView = UIActivityIndicatorView(style: .large)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -58,9 +58,10 @@ final class LoadingOverlayView: UIView {
         layer.cornerCurve = .continuous
         clipsToBounds = true
 
-        backgroundColor = AppColor.background.withAlphaComponent(0.68)
+        backgroundColor = .clear
+        backgroundView.isHidden = true
         indicatorView.hidesWhenStopped = false
-        indicatorView.color = AppColor.textSecondary
+        indicatorView.color = AppColor.accent
 
         addSubviews(backgroundView, indicatorView)
         [backgroundView, indicatorView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -162,8 +163,8 @@ final class IconActionButton: UIButton {
 
 final class SearchInputView: UIControl, UITextFieldDelegate {
     private let containerView = UIView()
-    private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
     private let textField = UITextField()
+    private let searchButton = UIButton(type: .system)
     private let placeholder: String
 
     var onSubmit: ((String) -> Void)?
@@ -179,7 +180,8 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         didSet {
             textField.isUserInteractionEnabled = isEditable
             containerView.isUserInteractionEnabled = isEditable
-            accessibilityTraits = isEditable ? [.searchField] : [.button]
+            isAccessibilityElement = isEditable == false
+            accessibilityTraits = isEditable ? [] : [.button]
         }
     }
 
@@ -191,41 +193,50 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         containerView.layer.cornerCurve = .continuous
         containerView.layer.borderWidth = 1
         containerView.layer.borderColor = AppColor.line.cgColor
-        iconView.tintColor = AppColor.textTertiary
-        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
         textField.placeholder = placeholder
         textField.font = AppTypography.body
         textField.textColor = AppColor.textPrimary
         textField.clearButtonMode = .whileEditing
         textField.returnKeyType = .search
+        textField.accessibilityLabel = placeholder
+        textField.accessibilityIdentifier = "searchInputView.textField"
         textField.delegate = self
         textField.addTarget(self, action: #selector(handleTextChanged(_:)), for: .editingChanged)
+
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "magnifyingglass")
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        configuration.baseForegroundColor = AppColor.textTertiary
+        configuration.contentInsets = .zero
+        searchButton.configuration = configuration
+        searchButton.accessibilityLabel = "검색"
+        searchButton.accessibilityIdentifier = "searchInputView.searchButton"
+        searchButton.addTarget(self, action: #selector(handleSearchTap), for: .touchUpInside)
 
         addSubview(containerView)
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.pinEdges(to: self)
 
-        containerView.addSubviews(textField, iconView)
+        containerView.addSubviews(textField, searchButton)
         textField.translatesAutoresizingMaskIntoConstraints = false
-        iconView.translatesAutoresizingMaskIntoConstraints = false
+        searchButton.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             containerView.heightAnchor.constraint(equalToConstant: 46),
 
             textField.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.l),
+            textField.trailingAnchor.constraint(equalTo: searchButton.leadingAnchor, constant: -AppSpacing.s),
             textField.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
 
-            iconView.leadingAnchor.constraint(equalTo: textField.trailingAnchor, constant: AppSpacing.s),
-            iconView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
-            iconView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16)
+            searchButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
+            searchButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            searchButton.widthAnchor.constraint(equalToConstant: 20),
+            searchButton.heightAnchor.constraint(equalToConstant: 20)
         ])
 
         accessibilityIdentifier = "searchInputView"
         accessibilityLabel = placeholder
         accessibilityTraits = [.button]
-        isAccessibilityElement = true
         isEditable = false
     }
 
@@ -250,6 +261,11 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
 
     @objc private func handleTextChanged(_ sender: UITextField) {
         onTextChanged?(sender.text ?? "")
+    }
+
+    @objc private func handleSearchTap() {
+        onSubmit?(textField.text ?? "")
+        textField.resignFirstResponder()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {

@@ -18,7 +18,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         
         let window = UIWindow(windowScene: windowScene)
 
-        let navigationController = UINavigationController()
+        let navigationController = AppNavigationController()
         let dependencies = AppDependencies.make()
         let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
         navigator.start()

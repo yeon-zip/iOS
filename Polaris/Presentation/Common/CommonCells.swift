@@ -133,7 +133,8 @@ final class BookCarouselCell: UICollectionViewCell {
 
         titleLabel.font = AppTypography.subheadline
         titleLabel.textColor = AppColor.textPrimary
-        titleLabel.numberOfLines = 2
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
         authorLabel.font = AppTypography.caption
         authorLabel.textColor = AppColor.textSecondary
         detailButton.accessibilityIdentifier = "bookCarouselCell.detailButton"
@@ -193,20 +194,8 @@ final class BookCarouselCell: UICollectionViewCell {
         titleLabel.text = viewData.title
         authorLabel.text = viewData.subtitle
         coverView.configure(seed: viewData.id, imageURL: viewData.coverImageURL)
-        let borderColor: UIColor
-        let borderWidth: CGFloat
-        if viewData.isSelected {
-            borderColor = AppColor.accent
-            borderWidth = 2
-        } else if viewData.isFeatured {
-            borderColor = AppColor.accent
-            borderWidth = 1.5
-        } else {
-            borderColor = AppColor.line
-            borderWidth = 1
-        }
-        containerView.layer.borderColor = borderColor.cgColor
-        containerView.layer.borderWidth = borderWidth
+        containerView.layer.borderColor = (viewData.isSelected ? AppColor.accent : AppColor.line).cgColor
+        containerView.layer.borderWidth = viewData.isSelected ? 2 : 1
     }
 }
 

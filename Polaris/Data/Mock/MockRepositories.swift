@@ -597,12 +597,12 @@ private extension String {
 private extension DistanceOption {
     var radiusQueryValue: String {
         switch self {
-        case .threeKm:
-            return "3"
+        case .twoKm:
+            return "2"
+        case .fiveKm:
+            return "5"
         case .tenKm:
             return "10"
-        case .twentyKm:
-            return "20"
         }
     }
 }
@@ -871,11 +871,11 @@ struct MockLibraryRepository: LibraryRepository {
         let sourceLibraries = origin.roadAddress.contains("구미") ? MockFixture.gumiLibraries : MockFixture.libraries
         let filteredByDistance: [LibrarySummary]
         switch distance {
-        case .threeKm:
+        case .twoKm:
             filteredByDistance = Array(sourceLibraries.prefix(2))
-        case .tenKm:
+        case .fiveKm:
             filteredByDistance = Array(sourceLibraries.prefix(3))
-        case .twentyKm:
+        case .tenKm:
             filteredByDistance = sourceLibraries
         }
 
@@ -890,11 +890,11 @@ struct MockLibraryRepository: LibraryRepository {
         let sourceLibraries = origin.roadAddress.contains("구미") ? MockFixture.gumiLibraries : MockFixture.libraries
         let distanceFiltered: [LibrarySummary]
         switch distance {
-        case .threeKm:
+        case .twoKm:
             distanceFiltered = Array(sourceLibraries.prefix(2))
-        case .tenKm:
+        case .fiveKm:
             distanceFiltered = Array(sourceLibraries.prefix(3))
-        case .twentyKm:
+        case .tenKm:
             distanceFiltered = sourceLibraries
         }
 

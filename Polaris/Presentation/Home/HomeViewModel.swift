@@ -17,7 +17,7 @@ final class HomeViewModel {
             latitude: 36.1450,
             longitude: 128.3937
         )
-        var selectedDistance: DistanceOption = .threeKm
+        var selectedDistance: DistanceOption = .twoKm
         var excludeClosed = false
         var libraries: [LibraryCardItemViewData] = []
     }
@@ -38,8 +38,12 @@ final class HomeViewModel {
         await refreshLibraries(request: currentRequest, generation: nil)
     }
 
-    func didTapSearch() {
-        onRoute?(.search(currentLocation: state.selectedLocation, currentDistance: state.selectedDistance))
+    func didTapSearch(initialQuery: String? = nil) {
+        onRoute?(.search(
+            currentLocation: state.selectedLocation,
+            currentDistance: state.selectedDistance,
+            initialQuery: initialQuery
+        ))
     }
 
     func didTapLikes() {

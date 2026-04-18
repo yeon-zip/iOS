@@ -20,6 +20,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
 
     private lazy var booksDataSource = makeBooksDataSource()
     private lazy var librariesDataSource = makeLibrariesDataSource()
+    private var backPanStartPoints: [ObjectIdentifier: CGPoint] = [:]
 
     init(viewModel: SearchResultsViewModel, navigator: AppNavigator) {
         self.viewModel = viewModel
@@ -37,6 +38,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        contentView.observeBackPans(target: self, action: #selector(handleBackPan(_:)))
         bind()
         Task { await viewModel.load() }
     }
@@ -150,6 +152,28 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
             viewModel.didSelectLibrary(id: library.id)
         }
     }
+
+    @objc private func handleBackPan(_ recognizer: UIPanGestureRecognizer) {
+        let key = ObjectIdentifier(recognizer)
+
+        switch recognizer.state {
+        case .began:
+            backPanStartPoints[key] = recognizer.location(in: view)
+        case .ended:
+            let startPoint = backPanStartPoints.removeValue(forKey: key)
+            let translation = recognizer.translation(in: view)
+            let velocity = recognizer.velocity(in: view)
+            guard let startPoint else { return }
+            guard startPoint.x <= 24 else { return }
+            guard translation.x > 80, velocity.x > 0 else { return }
+            guard abs(translation.x) > abs(translation.y) else { return }
+            viewModel.didTapBack()
+        case .cancelled, .failed:
+            backPanStartPoints.removeValue(forKey: key)
+        default:
+            break
+        }
+    }
 }
 
 private final class SearchResultsView: UIView {
@@ -157,12 +181,13 @@ private final class SearchResultsView: UIView {
     let searchInputView = SearchInputView(placeholder: "도서명, 저자, 출판사 검색")
     let booksCollectionView: UICollectionView
     let librariesCollectionView: ContentSizedCollectionView
-    let distanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .threeKm)
+    let distanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .twoKm)
     let excludeToggle = InlineToggleView(title: "대출불가 제외")
     private let booksLoadingView = LoadingOverlayView()
     private let librariesLoadingView = LoadingOverlayView()
     private let distanceHeader = SectionHeaderView(title: "검색 반경")
     private let libraryHeader: SectionHeaderView
+    private let backCaptureView = UIView()
     private let scrollView = UIScrollView()
     private let scrollContentView = UIView()
 
@@ -176,6 +201,7 @@ private final class SearchResultsView: UIView {
         booksCollectionView.backgroundColor = .clear
         librariesCollectionView.backgroundColor = .clear
         librariesCollectionView.isScrollEnabled = false
+        backCaptureView.backgroundColor = .clear
         scrollView.alwaysBounceVertical = true
         scrollView.showsVerticalScrollIndicator = true
 
@@ -184,8 +210,8 @@ private final class SearchResultsView: UIView {
         searchHeaderStack.spacing = AppSpacing.l
         searchHeaderStack.alignment = .center
 
-        addSubviews(searchHeaderStack, scrollView)
-        [searchHeaderStack, scrollView].forEach {
+        addSubviews(searchHeaderStack, scrollView, backCaptureView)
+        [searchHeaderStack, scrollView, backCaptureView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
         scrollView.addSubview(scrollContentView)
@@ -215,6 +241,11 @@ private final class SearchResultsView: UIView {
             scrollView.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            backCaptureView.topAnchor.constraint(equalTo: topAnchor),
+            backCaptureView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backCaptureView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            backCaptureView.widthAnchor.constraint(equalToConstant: 24),
 
             scrollContentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
             scrollContentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
@@ -288,6 +319,15 @@ private final class SearchResultsView: UIView {
         librariesCollectionView.minimumContentHeight = isEmpty ? 180 : 0
     }
 
+    func observeBackPans(target: Any, action: Selector) {
+        let capturePanGesture = UIPanGestureRecognizer(target: target, action: action)
+        capturePanGesture.cancelsTouchesInView = false
+        backCaptureView.addGestureRecognizer(capturePanGesture)
+        scrollView.panGestureRecognizer.addTarget(target, action: action)
+        booksCollectionView.panGestureRecognizer.addTarget(target, action: action)
+        librariesCollectionView.panGestureRecognizer.addTarget(target, action: action)
+    }
+
     private static func makeBooksLayout() -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
@@ -341,7 +381,7 @@ private final class SearchResultsView: UIView {
                 latitude: 36.1450,
                 longitude: 128.3937
             ),
-            currentDistance: .threeKm
+            currentDistance: .twoKm
         ),
         navigator: navigator
     )

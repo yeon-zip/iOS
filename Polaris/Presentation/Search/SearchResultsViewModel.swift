@@ -33,12 +33,14 @@ final class SearchResultsViewModel {
         searchRepository: any SearchRepository,
         libraryRepository: any LibraryRepository,
         currentLocation: AddressSuggestion,
-        currentDistance: DistanceOption
+        currentDistance: DistanceOption,
+        initialQuery: String? = nil
     ) {
         self.searchRepository = searchRepository
         self.libraryRepository = libraryRepository
         self.currentLocation = currentLocation
         self.state = State(selectedDistance: currentDistance)
+        self.state.query.text = initialQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     func load() async {

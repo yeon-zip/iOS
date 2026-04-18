@@ -20,7 +20,6 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate, Lo
     private lazy var homeDataSource = makeHomeDataSource()
     private lazy var searchBooksDataSource = makeSearchBooksDataSource()
     private lazy var searchLibrariesDataSource = makeSearchLibrariesDataSource()
-    private var isShowingSearchResults = false
 
     init(viewModel: HomeViewModel, searchViewModel: SearchResultsViewModel, navigator: AppNavigator) {
         self.viewModel = viewModel
@@ -52,10 +51,7 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate, Lo
         }, for: .touchUpInside)
         contentView.searchInputView.isEditable = true
         contentView.searchInputView.onSubmit = { [weak self] query in
-            self?.handleInlineSearchSubmit(query)
-        }
-        contentView.searchInputView.onTextChanged = { [weak self] text in
-            self?.handleInlineSearchTextChanged(text)
+            self?.handleSearchSubmit(query)
         }
         contentView.homeDistanceChipView.onSelectionChanged = { [weak self] distance in
             self?.viewModel.didSelectDistance(distance)
@@ -155,34 +151,10 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate, Lo
         contentView.updateSearchLibraryMinimumHeight(isEmpty: state.libraries.isEmpty || state.isLibrariesLoading)
     }
 
-    private func handleInlineSearchSubmit(_ query: String) {
+    private func handleSearchSubmit(_ query: String) {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         contentView.searchInputView.text = trimmedQuery
-
-        guard trimmedQuery.isEmpty == false else {
-            setSearchMode(false)
-            return
-        }
-
-        if isShowingSearchResults == false {
-            _ = searchViewModel.didSelectDistance(viewModel.state.selectedDistance)
-        }
-        setSearchMode(true)
-        _ = searchViewModel.didSubmitQuery(trimmedQuery)
-    }
-
-    private func handleInlineSearchTextChanged(_ text: String) {
-        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            setSearchMode(false)
-        }
-    }
-
-    private func setSearchMode(_ isSearchMode: Bool) {
-        isShowingSearchResults = isSearchMode
-        contentView.setSearchMode(isSearchMode)
-        if isSearchMode {
-            contentView.resetSearchScrollPosition()
-        }
+        viewModel.didTapSearch(initialQuery: trimmedQuery.isEmpty ? nil : trimmedQuery)
     }
 
     private func makeHomeDataSource() -> UICollectionViewDiffableDataSource<Int, LibraryCardItemViewData> {
@@ -252,11 +224,11 @@ private final class HomeView: UIView {
     let alertButton = IconActionButton(symbolName: "bell", style: .soft, accessibilityLabel: "알림 화면 열기")
     let profileButton = IconActionButton(symbolName: "person.crop.circle", style: .soft, accessibilityLabel: "프로필 화면 열기")
     let searchInputView = SearchInputView(placeholder: "도서명, 저자, 출판사 검색")
-    let homeDistanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .threeKm)
+    let homeDistanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .twoKm)
     let homeExcludeToggle = InlineToggleView(title: "운영종료 제외")
     let homeCollectionView: UICollectionView
     let searchBooksCollectionView: UICollectionView
-    let searchDistanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .threeKm)
+    let searchDistanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .twoKm)
     let searchExcludeToggle = InlineToggleView(title: "대출불가 제외")
     let searchLibrariesCollectionView: ContentSizedCollectionView
     private let searchBooksLoadingView = LoadingOverlayView()
@@ -265,6 +237,9 @@ private final class HomeView: UIView {
     private let homeContentView = UIView()
     private let searchContentView = UIScrollView()
     private let searchContentContainer = UIView()
+    private let searchBackCaptureView = UIView()
+    private let homeModeMarker = UIView()
+    private let searchModeMarker = UIView()
     private let homeDistanceHeader = SectionHeaderView(title: "검색 반경")
     private lazy var homeLibraryHeader = SectionHeaderView(title: "주변 도서관", accessoryView: homeExcludeToggle)
     private let searchDistanceHeader = SectionHeaderView(title: "검색 반경")
@@ -294,13 +269,25 @@ private final class HomeView: UIView {
         searchContentView.alwaysBounceVertical = true
         searchContentView.showsVerticalScrollIndicator = true
         searchLibrariesCollectionView.isScrollEnabled = false
+        searchBackCaptureView.backgroundColor = .clear
+        searchBackCaptureView.isHidden = true
+        homeModeMarker.isAccessibilityElement = true
+        homeModeMarker.accessibilityIdentifier = "home.homeContent"
+        homeModeMarker.accessibilityLabel = "홈 콘텐츠"
+        searchModeMarker.isAccessibilityElement = true
+        searchModeMarker.accessibilityIdentifier = "home.searchContent"
+        searchModeMarker.accessibilityLabel = "검색 콘텐츠"
 
-        addSubviews(locationButton, actionStack, searchInputView, homeContentView, searchContentView)
-        [locationButton, actionStack, searchInputView, homeContentView, searchContentView].forEach {
+        addSubviews(locationButton, actionStack, searchInputView, homeContentView, searchContentView, searchBackCaptureView)
+        [locationButton, actionStack, searchInputView, homeContentView, searchContentView, searchBackCaptureView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
         searchContentView.addSubview(searchContentContainer)
         searchContentContainer.translatesAutoresizingMaskIntoConstraints = false
+        homeContentView.addSubview(homeModeMarker)
+        searchContentContainer.addSubview(searchModeMarker)
+        homeModeMarker.translatesAutoresizingMaskIntoConstraints = false
+        searchModeMarker.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             locationButton.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.xl),
@@ -325,11 +312,26 @@ private final class HomeView: UIView {
             searchContentView.trailingAnchor.constraint(equalTo: homeContentView.trailingAnchor),
             searchContentView.bottomAnchor.constraint(equalTo: homeContentView.bottomAnchor),
 
+            searchBackCaptureView.topAnchor.constraint(equalTo: topAnchor),
+            searchBackCaptureView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            searchBackCaptureView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            searchBackCaptureView.widthAnchor.constraint(equalToConstant: 24),
+
             searchContentContainer.topAnchor.constraint(equalTo: searchContentView.contentLayoutGuide.topAnchor),
             searchContentContainer.leadingAnchor.constraint(equalTo: searchContentView.contentLayoutGuide.leadingAnchor),
             searchContentContainer.trailingAnchor.constraint(equalTo: searchContentView.contentLayoutGuide.trailingAnchor),
             searchContentContainer.bottomAnchor.constraint(equalTo: searchContentView.contentLayoutGuide.bottomAnchor),
-            searchContentContainer.widthAnchor.constraint(equalTo: searchContentView.frameLayoutGuide.widthAnchor)
+            searchContentContainer.widthAnchor.constraint(equalTo: searchContentView.frameLayoutGuide.widthAnchor),
+
+            homeModeMarker.topAnchor.constraint(equalTo: homeContentView.topAnchor),
+            homeModeMarker.leadingAnchor.constraint(equalTo: homeContentView.leadingAnchor),
+            homeModeMarker.widthAnchor.constraint(equalToConstant: 1),
+            homeModeMarker.heightAnchor.constraint(equalToConstant: 1),
+
+            searchModeMarker.topAnchor.constraint(equalTo: searchContentContainer.topAnchor),
+            searchModeMarker.leadingAnchor.constraint(equalTo: searchContentContainer.leadingAnchor),
+            searchModeMarker.widthAnchor.constraint(equalToConstant: 1),
+            searchModeMarker.heightAnchor.constraint(equalToConstant: 1)
         ])
 
         setupHomeContent()
@@ -354,6 +356,18 @@ private final class HomeView: UIView {
     func setSearchMode(_ isSearchMode: Bool) {
         homeContentView.isHidden = isSearchMode
         searchContentView.isHidden = isSearchMode == false
+        searchBackCaptureView.isHidden = isSearchMode == false
+        homeContentView.accessibilityElementsHidden = isSearchMode
+        searchContentView.accessibilityElementsHidden = isSearchMode == false
+    }
+
+    func observeSearchBackPans(target: Any, action: Selector) {
+        let capturePanGesture = UIPanGestureRecognizer(target: target, action: action)
+        capturePanGesture.cancelsTouchesInView = false
+        searchBackCaptureView.addGestureRecognizer(capturePanGesture)
+        searchContentView.panGestureRecognizer.addTarget(target, action: action)
+        searchBooksCollectionView.panGestureRecognizer.addTarget(target, action: action)
+        searchLibrariesCollectionView.panGestureRecognizer.addTarget(target, action: action)
     }
 
     func resetSearchScrollPosition() {

@@ -22,26 +22,49 @@ final class PolarisUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeInlineSearchToBookDetailSheet() throws {
+    func testHomeSearchPushesToSearchScreenAndOpensBookDetailSheet() throws {
         XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
 
-        let searchField = app.textFields["도서명, 저자, 출판사 검색"].firstMatch
+        let searchField = app.textFields["searchInputView.textField"].firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
         searchField.tap()
-        searchField.typeText("아몬드\n")
+        searchField.typeText("아몬드")
+        app.buttons["searchInputView.searchButton"].firstMatch.tap()
 
-        XCTAssertTrue(app.otherElements["homeScreen"].exists)
+        XCTAssertTrue(app.otherElements["searchScreen"].waitForExistence(timeout: 3))
 
-        let firstBookCell = app.collectionViews["home.search.bookCollection"].cells["bookCarouselCell"].firstMatch
+        let firstBookCell = app.collectionViews["search.bookCollection"].cells["bookCarouselCell"].firstMatch
         XCTAssertTrue(firstBookCell.waitForExistence(timeout: 3))
-        firstBookCell.tap()
-
-        XCTAssertFalse(app.otherElements["bookDetailSheet"].exists)
-
         let detailButton = firstBookCell.buttons["bookCarouselCell.detailButton"]
         XCTAssertTrue(detailButton.waitForExistence(timeout: 3))
         detailButton.tap()
         XCTAssertTrue(app.otherElements["bookDetailSheet"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testSearchScreenCanDismissWithEdgeSwipe() throws {
+        XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
+
+        let searchField = app.textFields["searchInputView.textField"].firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("아몬드")
+        app.buttons["searchInputView.searchButton"].firstMatch.tap()
+
+        let searchScreen = app.otherElements["searchScreen"]
+        XCTAssertTrue(searchScreen.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.collectionViews["search.bookCollection"].waitForExistence(timeout: 3))
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end)
+
+        let homeLocationButton = app.buttons["home.locationButton"]
+        let homeVisible = NSPredicate(format: "hittable == true")
+        expectation(for: homeVisible, evaluatedWith: homeLocationButton)
+        waitForExpectations(timeout: 3)
+        XCTAssertTrue(homeLocationButton.isHittable)
+        XCTAssertFalse(app.buttons["search.backButton"].isHittable)
     }
 
     @MainActor

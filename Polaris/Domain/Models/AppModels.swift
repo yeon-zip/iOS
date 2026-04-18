@@ -8,9 +8,9 @@
 import Foundation
 
 enum DistanceOption: String, CaseIterable, Hashable, Sendable {
-    case threeKm = "3km"
+    case twoKm = "2km"
+    case fiveKm = "5km"
     case tenKm = "10km"
-    case twentyKm = "20km"
 }
 
 enum OperatingStatus: Hashable, Sendable {
