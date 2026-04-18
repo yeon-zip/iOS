@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 final class SearchResultsViewController: BaseViewController, UICollectionViewDelegate {
     private static let booksSection = 0
@@ -50,6 +53,9 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
         contentView.searchInputView.onSubmit = { [weak self] query in
             self?.viewModel.didSubmitQuery(query)
         }
+        contentView.distanceChipView.onSelectionChanged = { [weak self] distance in
+            self?.viewModel.didSelectDistance(distance)
+        }
         contentView.excludeToggle.onToggle = { [weak self] isOn in
             self?.viewModel.didToggleExcludeUnavailable(isOn)
         }
@@ -66,21 +72,33 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
 
     private func render(_ state: SearchResultsViewModel.State) {
         contentView.searchInputView.text = state.query.text
+        contentView.distanceChipView.updateSelection(state.selectedDistance)
         contentView.excludeToggle.isSelected = state.query.excludeUnavailable
+        contentView.updateExcludeToggleEnabled(state.selectedBookID != nil)
+        contentView.setBooksLoading(state.isBooksLoading)
+        contentView.setLibrariesLoading(state.isLibrariesLoading)
         contentView.updateLibraryHeaderTitle(
             state.selectedBookID == nil ? "주변 도서관" : "주변 보유 도서관"
         )
-        contentView.booksCollectionView.backgroundView = state.books.isEmpty
-            ? EmptyStateView(title: "도서를 찾지 못했어요", message: "도서명이나 저자를 조금 다르게 입력해보세요.")
-            : nil
-        contentView.librariesCollectionView.backgroundView = state.libraries.isEmpty
-            ? EmptyStateView(
-                title: state.selectedBookID == nil ? "도서관 결과가 없어요" : "보유 도서관이 없어요",
-                message: state.selectedBookID == nil
-                    ? "검색어나 대출 가능 필터를 조정해보세요."
-                    : "다른 책을 선택하거나 대출 가능 필터를 조정해보세요."
-            )
-            : nil
+        if state.isBooksLoading {
+            contentView.booksCollectionView.backgroundView = nil
+        } else if state.books.isEmpty {
+            contentView.booksCollectionView.backgroundView = state.query.text.isEmpty
+                ? EmptyStateView(title: "도서를 검색해보세요", message: "도서명, 저자, 출판사로 검색할 수 있어요.")
+                : EmptyStateView(title: "도서를 찾지 못했어요", message: "도서명이나 저자를 조금 다르게 입력해보세요.")
+        } else {
+            contentView.booksCollectionView.backgroundView = nil
+        }
+        contentView.librariesCollectionView.backgroundView = state.isLibrariesLoading
+            ? nil
+            : state.libraries.isEmpty
+                ? EmptyStateView(
+                    title: state.selectedBookID == nil ? "주변 도서관이 없어요" : "보유 도서관이 없어요",
+                    message: state.selectedBookID == nil
+                        ? "현재 위치 기준 반경 안에서 찾지 못했어요."
+                        : "다른 책을 선택하거나 대출 가능 필터를 조정해보세요."
+                )
+                : nil
 
         var bookSnapshot = NSDiffableDataSourceSnapshot<Int, BookCarouselItemViewData>()
         bookSnapshot.appendSections([Self.booksSection])
@@ -91,6 +109,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
         librarySnapshot.appendSections([Self.librariesSection])
         librarySnapshot.appendItems(state.libraries, toSection: Self.librariesSection)
         librariesDataSource.apply(librarySnapshot, animatingDifferences: false)
+        contentView.updateLibraryMinimumHeight(isEmpty: state.libraries.isEmpty || state.isLibrariesLoading)
     }
 
     private func makeBooksDataSource() -> UICollectionViewDiffableDataSource<Int, BookCarouselItemViewData> {
@@ -137,27 +156,50 @@ private final class SearchResultsView: UIView {
     let backButton = IconActionButton(symbolName: "chevron.left", accessibilityLabel: "뒤로가기")
     let searchInputView = SearchInputView(placeholder: "도서명, 저자, 출판사 검색")
     let booksCollectionView: UICollectionView
-    let librariesCollectionView: UICollectionView
+    let librariesCollectionView: ContentSizedCollectionView
+    let distanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .threeKm)
     let excludeToggle = InlineToggleView(title: "대출불가 제외")
+    private let booksLoadingView = LoadingOverlayView()
+    private let librariesLoadingView = LoadingOverlayView()
+    private let distanceHeader = SectionHeaderView(title: "검색 반경")
     private let libraryHeader: SectionHeaderView
+    private let scrollView = UIScrollView()
+    private let scrollContentView = UIView()
 
     override init(frame: CGRect) {
         booksCollectionView = UICollectionView(frame: .zero, collectionViewLayout: SearchResultsView.makeBooksLayout())
-        librariesCollectionView = UICollectionView(frame: .zero, collectionViewLayout: SearchResultsView.makeLibrariesLayout())
+        librariesCollectionView = ContentSizedCollectionView(frame: .zero, collectionViewLayout: SearchResultsView.makeLibrariesLayout())
         libraryHeader = SectionHeaderView(title: "주변 도서관", accessoryView: excludeToggle)
         super.init(frame: frame)
 
         backgroundColor = AppColor.background
         booksCollectionView.backgroundColor = .clear
         librariesCollectionView.backgroundColor = .clear
+        librariesCollectionView.isScrollEnabled = false
+        scrollView.alwaysBounceVertical = true
+        scrollView.showsVerticalScrollIndicator = true
 
         let searchHeaderStack = UIStackView(arrangedSubviews: [backButton, searchInputView])
         searchHeaderStack.axis = .horizontal
         searchHeaderStack.spacing = AppSpacing.l
         searchHeaderStack.alignment = .center
 
-        addSubviews(searchHeaderStack, booksCollectionView, libraryHeader, librariesCollectionView)
-        [searchHeaderStack, booksCollectionView, libraryHeader, librariesCollectionView].forEach {
+        addSubviews(searchHeaderStack, scrollView)
+        [searchHeaderStack, scrollView].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+        }
+        scrollView.addSubview(scrollContentView)
+        scrollContentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollContentView.addSubviews(
+            booksCollectionView,
+            booksLoadingView,
+            distanceHeader,
+            distanceChipView,
+            libraryHeader,
+            librariesCollectionView,
+            librariesLoadingView
+        )
+        [booksCollectionView, booksLoadingView, distanceHeader, distanceChipView, libraryHeader, librariesCollectionView, librariesLoadingView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
@@ -169,19 +211,51 @@ private final class SearchResultsView: UIView {
             searchHeaderStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             searchHeaderStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            booksCollectionView.topAnchor.constraint(equalTo: searchHeaderStack.bottomAnchor, constant: AppSpacing.xl),
-            booksCollectionView.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
-            booksCollectionView.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: searchHeaderStack.bottomAnchor, constant: AppSpacing.xl),
+            scrollView.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            scrollContentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            scrollContentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            scrollContentView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            scrollContentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            scrollContentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+
+            booksCollectionView.topAnchor.constraint(equalTo: scrollContentView.topAnchor),
+            booksCollectionView.leadingAnchor.constraint(equalTo: scrollContentView.leadingAnchor),
+            booksCollectionView.trailingAnchor.constraint(equalTo: scrollContentView.trailingAnchor),
             booksCollectionView.heightAnchor.constraint(equalToConstant: 220),
 
-            libraryHeader.topAnchor.constraint(equalTo: booksCollectionView.bottomAnchor, constant: AppSpacing.xl),
-            libraryHeader.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
-            libraryHeader.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
+            booksLoadingView.topAnchor.constraint(equalTo: booksCollectionView.topAnchor),
+            booksLoadingView.leadingAnchor.constraint(equalTo: booksCollectionView.leadingAnchor),
+            booksLoadingView.trailingAnchor.constraint(equalTo: booksCollectionView.trailingAnchor),
+            booksLoadingView.bottomAnchor.constraint(equalTo: booksCollectionView.bottomAnchor),
+
+            distanceHeader.topAnchor.constraint(equalTo: booksCollectionView.bottomAnchor, constant: AppSpacing.xl),
+            distanceHeader.leadingAnchor.constraint(equalTo: scrollContentView.leadingAnchor),
+            distanceHeader.trailingAnchor.constraint(equalTo: scrollContentView.trailingAnchor),
+
+            distanceChipView.topAnchor.constraint(equalTo: distanceHeader.bottomAnchor, constant: AppSpacing.l),
+            distanceChipView.leadingAnchor.constraint(equalTo: scrollContentView.leadingAnchor),
+            distanceChipView.trailingAnchor.constraint(equalTo: scrollContentView.trailingAnchor),
+            distanceChipView.heightAnchor.constraint(equalToConstant: 42),
+
+            libraryHeader.topAnchor.constraint(equalTo: distanceChipView.bottomAnchor, constant: AppSpacing.xl),
+            libraryHeader.leadingAnchor.constraint(equalTo: scrollContentView.leadingAnchor),
+            libraryHeader.trailingAnchor.constraint(equalTo: scrollContentView.trailingAnchor),
 
             librariesCollectionView.topAnchor.constraint(equalTo: libraryHeader.bottomAnchor, constant: AppSpacing.l),
-            librariesCollectionView.leadingAnchor.constraint(equalTo: searchHeaderStack.leadingAnchor),
-            librariesCollectionView.trailingAnchor.constraint(equalTo: searchHeaderStack.trailingAnchor),
-            librariesCollectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            librariesCollectionView.leadingAnchor.constraint(equalTo: scrollContentView.leadingAnchor),
+            librariesCollectionView.trailingAnchor.constraint(equalTo: scrollContentView.trailingAnchor),
+            librariesCollectionView.bottomAnchor.constraint(equalTo: scrollContentView.bottomAnchor)
+        ])
+
+        NSLayoutConstraint.activate([
+            librariesLoadingView.topAnchor.constraint(equalTo: librariesCollectionView.topAnchor),
+            librariesLoadingView.leadingAnchor.constraint(equalTo: librariesCollectionView.leadingAnchor),
+            librariesLoadingView.trailingAnchor.constraint(equalTo: librariesCollectionView.trailingAnchor),
+            librariesLoadingView.bottomAnchor.constraint(equalTo: librariesCollectionView.bottomAnchor)
         ])
 
         accessibilityIdentifier = "searchScreen"
@@ -196,6 +270,22 @@ private final class SearchResultsView: UIView {
 
     func updateLibraryHeaderTitle(_ title: String) {
         libraryHeader.updateTitle(title)
+    }
+
+    func updateExcludeToggleEnabled(_ isEnabled: Bool) {
+        excludeToggle.isEnabled = isEnabled
+    }
+
+    func setBooksLoading(_ isLoading: Bool) {
+        booksLoadingView.setLoading(isLoading)
+    }
+
+    func setLibrariesLoading(_ isLoading: Bool) {
+        librariesLoadingView.setLoading(isLoading)
+    }
+
+    func updateLibraryMinimumHeight(isEmpty: Bool) {
+        librariesCollectionView.minimumContentHeight = isEmpty ? 180 : 0
     }
 
     private static func makeBooksLayout() -> UICollectionViewLayout {
@@ -233,3 +323,27 @@ private final class SearchResultsView: UIView {
         }
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("검색 결과") {
+    let dependencies = AppDependencies.mock
+    let navigationController = UINavigationController()
+    let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
+
+    return SearchResultsViewController(
+        viewModel: SearchResultsViewModel(
+            searchRepository: dependencies.searchRepository,
+            libraryRepository: dependencies.libraryRepository,
+            currentLocation: AddressSuggestion(
+                id: "preview-location",
+                roadAddress: "경상북도 구미시 대학로 61",
+                detailText: "기본 위치",
+                latitude: 36.1450,
+                longitude: 128.3937
+            ),
+            currentDistance: .threeKm
+        ),
+        navigator: navigator
+    )
+}
+#endif

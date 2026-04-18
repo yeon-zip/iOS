@@ -11,9 +11,12 @@ import Foundation
 final class SearchResultsViewModel {
     struct State: Equatable {
         var query = SearchQuery(text: "", excludeUnavailable: false)
+        var selectedDistance: DistanceOption
         var selectedBookID: String?
         var books: [BookCarouselItemViewData] = []
         var libraries: [LibraryCardItemViewData] = []
+        var isBooksLoading = false
+        var isLibrariesLoading = false
     }
 
     var onStateChange: ((State) -> Void)?
@@ -21,17 +24,25 @@ final class SearchResultsViewModel {
 
     private let searchRepository: any SearchRepository
     private let libraryRepository: any LibraryRepository
-    private(set) var state = State()
+    private var currentLocation: AddressSuggestion
+    private(set) var state: State
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration = 0
 
-    init(searchRepository: any SearchRepository, libraryRepository: any LibraryRepository) {
+    init(
+        searchRepository: any SearchRepository,
+        libraryRepository: any LibraryRepository,
+        currentLocation: AddressSuggestion,
+        currentDistance: DistanceOption
+    ) {
         self.searchRepository = searchRepository
         self.libraryRepository = libraryRepository
+        self.currentLocation = currentLocation
+        self.state = State(selectedDistance: currentDistance)
     }
 
     func load() async {
-        await refresh(request: currentRequest, generation: nil)
+        await scheduleFullRefresh().value
     }
 
     func didTapBack() {
@@ -39,27 +50,43 @@ final class SearchResultsViewModel {
     }
 
     @discardableResult
+    func didUpdateLocation(_ location: AddressSuggestion) -> Task<Void, Never>? {
+        currentLocation = location
+        guard state.query.text.isEmpty == false else { return nil }
+        return scheduleLibrariesRefresh()
+    }
+
+    @discardableResult
     func didSubmitQuery(_ query: String) -> Task<Void, Never> {
-        state.query.text = query
+        state.query.text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.query.excludeUnavailable = false
         state.selectedBookID = nil
         state.books = state.books.map { item in
             BookCarouselItemViewData(
                 id: item.id,
                 title: item.title,
                 subtitle: item.subtitle,
+                coverImageURL: item.coverImageURL,
                 isFeatured: item.isFeatured,
                 isSelected: false
             )
         }
         onStateChange?(state)
-        return scheduleRefresh()
+        return scheduleFullRefresh()
     }
 
     @discardableResult
     func didToggleExcludeUnavailable(_ isOn: Bool) -> Task<Void, Never> {
         state.query.excludeUnavailable = isOn
         onStateChange?(state)
-        return scheduleRefresh()
+        return scheduleLibrariesRefresh()
+    }
+
+    @discardableResult
+    func didSelectDistance(_ distance: DistanceOption) -> Task<Void, Never> {
+        state.selectedDistance = distance
+        onStateChange?(state)
+        return scheduleLibrariesRefresh()
     }
 
     @discardableResult
@@ -70,12 +97,13 @@ final class SearchResultsViewModel {
                 id: item.id,
                 title: item.title,
                 subtitle: item.subtitle,
+                coverImageURL: item.coverImageURL,
                 isFeatured: item.isFeatured,
                 isSelected: item.id == id
             )
         }
         onStateChange?(state)
-        return scheduleRefresh()
+        return scheduleLibrariesRefresh()
     }
 
     func didTapBookDetail(id: String) {
@@ -87,68 +115,67 @@ final class SearchResultsViewModel {
     }
 
     func didToggleLibraryFavorite(id: String) {
-        guard let index = state.libraries.firstIndex(where: { $0.id == id }) else { return }
-        let item = state.libraries[index]
-        state.libraries[index] = LibraryCardItemViewData(
-            id: item.id,
-            title: item.title,
-            distanceText: item.distanceText,
-            badges: item.badges,
-            showsBell: item.showsBell,
-            isBellActive: item.isBellActive,
-            isFavorite: item.isFavorite == false
-        )
-        onStateChange?(state)
+        // Favorites API is not available yet.
     }
 
     func didToggleLibraryAlert(id: String) {
-        guard let index = state.libraries.firstIndex(where: { $0.id == id }) else { return }
-        let item = state.libraries[index]
-        state.libraries[index] = LibraryCardItemViewData(
-            id: item.id,
-            title: item.title,
-            distanceText: item.distanceText,
-            badges: item.badges,
-            showsBell: item.showsBell,
-            isBellActive: item.isBellActive == false,
-            isFavorite: item.isFavorite
-        )
-        onStateChange?(state)
+        // Alerts API is not available yet.
     }
 
     private var currentRequest: SearchResultsRequest {
-        SearchResultsRequest(query: state.query, selectedBookID: state.selectedBookID)
+        SearchResultsRequest(
+            selectedDistance: state.selectedDistance,
+            query: state.query,
+            selectedBookID: state.selectedBookID
+        )
     }
 
-    private func scheduleRefresh() -> Task<Void, Never> {
+    private func scheduleFullRefresh() -> Task<Void, Never> {
         refreshGeneration += 1
         let generation = refreshGeneration
         let request = currentRequest
         refreshTask?.cancel()
+        state.isBooksLoading = true
+        state.isLibrariesLoading = true
+        state.libraries = []
+        onStateChange?(state)
         let task: Task<Void, Never> = Task { [weak self] in
             guard let self else { return }
-            await self.refresh(request: request, generation: generation)
+            await self.refreshBooksAndLibraries(request: request, generation: generation)
         }
         refreshTask = task
         return task
     }
 
-    private func refresh(request: SearchResultsRequest, generation: Int?) async {
+    private func scheduleLibrariesRefresh() -> Task<Void, Never> {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        let request = currentRequest
+        refreshTask?.cancel()
+        state.isBooksLoading = false
+        state.isLibrariesLoading = true
+        state.libraries = []
+        onStateChange?(state)
+        let task: Task<Void, Never> = Task { [weak self] in
+            guard let self else { return }
+            await self.refreshLibraries(request: request, generation: generation)
+        }
+        refreshTask = task
+        return task
+    }
+
+    private func refreshBooksAndLibraries(request: SearchResultsRequest, generation: Int) async {
         let fetchedBooks = await searchRepository.searchBooks(query: request.query.text)
+        guard Task.isCancelled == false, generation == refreshGeneration else { return }
+
         let effectiveSelectedBookID: String?
-        if let selectedBookID = request.selectedBookID,
-           fetchedBooks.contains(where: { $0.id == selectedBookID }) {
+        if request.query.text.isEmpty {
+            effectiveSelectedBookID = nil
+        } else if let selectedBookID = request.selectedBookID,
+                  fetchedBooks.contains(where: { $0.id == selectedBookID }) {
             effectiveSelectedBookID = selectedBookID
         } else {
-            effectiveSelectedBookID = nil
-        }
-        let fetchedLibraries = await libraryRepository.fetchNearbyLibraries(
-            query: request.query,
-            selectedBookID: effectiveSelectedBookID
-        )
-        guard Task.isCancelled == false else { return }
-        if let generation {
-            guard generation == refreshGeneration, request == currentRequest else { return }
+            effectiveSelectedBookID = fetchedBooks.first?.id
         }
 
         state.selectedBookID = effectiveSelectedBookID
@@ -157,10 +184,36 @@ final class SearchResultsViewModel {
                 id: book.id,
                 title: book.title,
                 subtitle: "저자: \(book.author)",
+                coverImageURL: book.coverImageURL,
                 isFeatured: index == 0,
                 isSelected: book.id == effectiveSelectedBookID
             )
         }
+        state.isBooksLoading = false
+        onStateChange?(state)
+
+        let fetchedLibraries = await libraryRepository.fetchNearbyLibraries(
+            origin: currentLocation,
+            distance: request.selectedDistance,
+            query: request.query,
+            selectedBookID: effectiveSelectedBookID
+        )
+        guard Task.isCancelled == false, generation == refreshGeneration else { return }
+        applyLibraries(fetchedLibraries)
+    }
+
+    private func refreshLibraries(request: SearchResultsRequest, generation: Int) async {
+        let fetchedLibraries = await libraryRepository.fetchNearbyLibraries(
+            origin: currentLocation,
+            distance: request.selectedDistance,
+            query: request.query,
+            selectedBookID: request.selectedBookID
+        )
+        guard Task.isCancelled == false, generation == refreshGeneration else { return }
+        applyLibraries(fetchedLibraries)
+    }
+
+    private func applyLibraries(_ fetchedLibraries: [LibrarySummary]) {
         state.libraries = fetchedLibraries.map { library in
             var badges = [makeOperatingBadge(library.operatingStatus)]
             if let loanStatus = library.loanStatus {
@@ -171,16 +224,19 @@ final class SearchResultsViewModel {
                 title: library.name,
                 distanceText: library.distanceText,
                 badges: badges,
-                showsBell: true,
+                showsBell: false,
+                showsFavorite: false,
                 isBellActive: library.isAlertEnabled,
                 isFavorite: library.isFavorite
             )
         }
+        state.isLibrariesLoading = false
         onStateChange?(state)
     }
 }
 
 private struct SearchResultsRequest: Equatable {
+    let selectedDistance: DistanceOption
     let query: SearchQuery
     let selectedBookID: String?
 }

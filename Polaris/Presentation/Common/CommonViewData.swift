@@ -11,6 +11,7 @@ struct BookCarouselItemViewData: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
+    let coverImageURL: URL?
     let isFeatured: Bool
     let isSelected: Bool
 
@@ -18,6 +19,7 @@ struct BookCarouselItemViewData: Identifiable, Hashable, Sendable {
         lhs.id == rhs.id &&
         lhs.title == rhs.title &&
         lhs.subtitle == rhs.subtitle &&
+        lhs.coverImageURL == rhs.coverImageURL &&
         lhs.isFeatured == rhs.isFeatured &&
         lhs.isSelected == rhs.isSelected
     }
@@ -26,6 +28,7 @@ struct BookCarouselItemViewData: Identifiable, Hashable, Sendable {
         hasher.combine(id)
         hasher.combine(title)
         hasher.combine(subtitle)
+        hasher.combine(coverImageURL)
         hasher.combine(isFeatured)
         hasher.combine(isSelected)
     }
@@ -37,6 +40,7 @@ struct LibraryCardItemViewData: Identifiable, Hashable, Sendable {
     let distanceText: String
     let badges: [BadgeContent]
     let showsBell: Bool
+    let showsFavorite: Bool
     let isBellActive: Bool
     let isFavorite: Bool
 
@@ -46,6 +50,7 @@ struct LibraryCardItemViewData: Identifiable, Hashable, Sendable {
         lhs.distanceText == rhs.distanceText &&
         lhs.badges == rhs.badges &&
         lhs.showsBell == rhs.showsBell &&
+        lhs.showsFavorite == rhs.showsFavorite &&
         lhs.isBellActive == rhs.isBellActive &&
         lhs.isFavorite == rhs.isFavorite
     }
@@ -56,6 +61,7 @@ struct LibraryCardItemViewData: Identifiable, Hashable, Sendable {
         hasher.combine(distanceText)
         hasher.combine(badges)
         hasher.combine(showsBell)
+        hasher.combine(showsFavorite)
         hasher.combine(isBellActive)
         hasher.combine(isFavorite)
     }

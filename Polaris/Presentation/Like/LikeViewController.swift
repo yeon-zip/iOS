@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 private enum LikeItem: Hashable, Sendable {
     case book(FavoriteBookItemViewData)
@@ -71,12 +74,12 @@ final class LikeViewController: BaseViewController, UICollectionViewDelegate {
         case .books:
             items = state.books.map(LikeItem.book)
             contentView.collectionView.backgroundView = state.books.isEmpty
-                ? EmptyStateView(title: "찜한 도서가 없어요", message: "홈과 검색 화면에서 하트를 눌러 목록을 채워보세요.")
+                ? EmptyStateView(title: "찜 API 미구현", message: "도서 찜 API가 아직 제공되지 않았습니다.")
                 : nil
         case .libraries:
             items = state.libraries.map(LikeItem.library)
             contentView.collectionView.backgroundView = state.libraries.isEmpty
-                ? EmptyStateView(title: "찜한 도서관이 없어요", message: "가까운 도서관을 찜해두면 여기서 다시 확인할 수 있어요.")
+                ? EmptyStateView(title: "찜 API 미구현", message: "도서관 찜 API가 아직 제공되지 않았습니다.")
                 : nil
         }
 
@@ -187,3 +190,16 @@ private final class LikeView: UIView {
         }
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("찜") {
+    let dependencies = AppDependencies.mock
+    let navigationController = UINavigationController()
+    let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
+
+    return LikeViewController(
+        viewModel: LikeViewModel(favoritesRepository: dependencies.favoritesRepository),
+        navigator: navigator
+    )
+}
+#endif

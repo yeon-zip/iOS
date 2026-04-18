@@ -17,7 +17,7 @@ final class HomeViewModel {
             latitude: 36.1450,
             longitude: 128.3937
         )
-        var selectedDistance: DistanceOption = .oneKm
+        var selectedDistance: DistanceOption = .threeKm
         var excludeClosed = false
         var libraries: [LibraryCardItemViewData] = []
     }
@@ -39,7 +39,7 @@ final class HomeViewModel {
     }
 
     func didTapSearch() {
-        onRoute?(.search)
+        onRoute?(.search(currentLocation: state.selectedLocation, currentDistance: state.selectedDistance))
     }
 
     func didTapLikes() {
@@ -84,18 +84,7 @@ final class HomeViewModel {
     }
 
     func didToggleFavorite(id: String) {
-        guard let index = state.libraries.firstIndex(where: { $0.id == id }) else { return }
-        let item = state.libraries[index]
-        state.libraries[index] = LibraryCardItemViewData(
-            id: item.id,
-            title: item.title,
-            distanceText: item.distanceText,
-            badges: item.badges,
-            showsBell: item.showsBell,
-            isBellActive: item.isBellActive,
-            isFavorite: item.isFavorite == false
-        )
-        onStateChange?(state)
+        // Favorites API is not available yet.
     }
 
     private var currentRequest: HomeLibrariesRequest {
@@ -137,6 +126,7 @@ final class HomeViewModel {
                 distanceText: library.distanceText,
                 badges: [makeOperatingBadge(library.operatingStatus)],
                 showsBell: false,
+                showsFavorite: false,
                 isBellActive: library.isAlertEnabled,
                 isFavorite: library.isFavorite
             )

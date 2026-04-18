@@ -22,15 +22,17 @@ final class PolarisUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeToSearchToBookDetailSheet() throws {
+    func testHomeInlineSearchToBookDetailSheet() throws {
         XCTAssertTrue(app.otherElements["homeScreen"].waitForExistence(timeout: 3))
 
-        let searchInput = app.buttons["home.searchInput"]
-        XCTAssertTrue(searchInput.waitForExistence(timeout: 3))
-        searchInput.tap()
-        XCTAssertTrue(app.otherElements["searchScreen"].waitForExistence(timeout: 3))
+        let searchField = app.textFields["도서명, 저자, 출판사 검색"].firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("아몬드\n")
 
-        let firstBookCell = app.collectionViews["search.bookCollection"].cells["bookCarouselCell"].firstMatch
+        XCTAssertTrue(app.otherElements["homeScreen"].exists)
+
+        let firstBookCell = app.collectionViews["home.search.bookCollection"].cells["bookCarouselCell"].firstMatch
         XCTAssertTrue(firstBookCell.waitForExistence(timeout: 3))
         firstBookCell.tap()
 

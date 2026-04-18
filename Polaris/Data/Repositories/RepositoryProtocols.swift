@@ -17,7 +17,7 @@ protocol BookRepository {
 
 protocol LibraryRepository {
     func fetchHomeLibraries(origin: AddressSuggestion, distance: DistanceOption, excludeClosed: Bool) async -> [LibrarySummary]
-    func fetchNearbyLibraries(query: SearchQuery, selectedBookID: String?) async -> [LibrarySummary]
+    func fetchNearbyLibraries(origin: AddressSuggestion, distance: DistanceOption, query: SearchQuery, selectedBookID: String?) async -> [LibrarySummary]
     func fetchLibraryDetail(id: String) async -> LibraryDetail?
 }
 

@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 final class BookDetailViewController: UIViewController {
     private let viewModel: BookDetailViewModel
@@ -38,7 +41,7 @@ final class BookDetailViewController: UIViewController {
 
     private func render(_ state: BookDetailViewModel.State) {
         guard let detail = state.detail else { return }
-        contentView.coverView.configure(seed: detail.id)
+        contentView.coverView.configure(seed: detail.id, imageURL: detail.coverImageURL)
         contentView.titleLabel.text = detail.title
         contentView.authorLabel.text = "저자: \(detail.author)"
         contentView.publisherLabel.text = "출판사: \(detail.publisher) · \(detail.year)"
@@ -82,7 +85,7 @@ private final class BookDetailView: UIView {
         summaryLabel.textColor = AppColor.textPrimary
         summaryLabel.numberOfLines = 0
 
-        decisionTitle.text = "이 책을 구매할 가치가 있나요?"
+        decisionTitle.text = "소장 투표 API 미구현"
         decisionTitle.font = AppTypography.headline
         decisionTitle.textColor = AppColor.textPrimary
 
@@ -108,6 +111,8 @@ private final class BookDetailView: UIView {
 
         [yesButton, noButton].forEach { button in
             button.layer.cornerCurve = .continuous
+            button.isEnabled = false
+            button.alpha = 0.5
         }
 
         addSubview(scrollView)
@@ -191,3 +196,16 @@ private final class BookDetailView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("도서 상세") {
+    let dependencies = AppDependencies.mock
+
+    return BookDetailViewController(
+        viewModel: BookDetailViewModel(
+            bookID: "book-arond-2",
+            bookRepository: dependencies.bookRepository
+        )
+    )
+}
+#endif

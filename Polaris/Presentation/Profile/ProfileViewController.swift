@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 final class ProfileViewController: BaseViewController {
     private let viewModel: ProfileViewModel
@@ -96,7 +99,7 @@ private final class ProfileView: UIView {
         infoStack.addArrangedSubview(subtitleLabel)
         infoStack.addArrangedSubview(locationLabel)
 
-        comingSoonLabel.text = "계정 설정과 활동 로그는 API 연동 단계에서 확장됩니다."
+        comingSoonLabel.text = "User(로그인) API가 아직 제공되지 않아 프로필 상세 설정과 활동 로그를 불러올 수 없습니다."
         comingSoonLabel.font = AppTypography.body
         comingSoonLabel.textColor = AppColor.textSecondary
         comingSoonLabel.numberOfLines = 0
@@ -154,3 +157,16 @@ private final class ProfileView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("프로필") {
+    let dependencies = AppDependencies.mock
+    let navigationController = UINavigationController()
+    let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
+
+    return ProfileViewController(
+        viewModel: ProfileViewModel(profileRepository: dependencies.profileRepository),
+        navigator: navigator
+    )
+}
+#endif

@@ -23,6 +23,79 @@ final class CardContainerView: UIView {
     }
 }
 
+final class ContentSizedCollectionView: UICollectionView {
+    var minimumContentHeight: CGFloat = 0 {
+        didSet {
+            guard minimumContentHeight != oldValue else { return }
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var contentSize: CGSize {
+        didSet {
+            guard contentSize != oldValue else { return }
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: CGSize {
+        layoutIfNeeded()
+        return CGSize(
+            width: UIView.noIntrinsicMetric,
+            height: max(contentSize.height, minimumContentHeight)
+        )
+    }
+}
+
+final class LoadingOverlayView: UIView {
+    private let backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+    private let indicatorView = UIActivityIndicatorView(style: .medium)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isHidden = true
+        layer.cornerRadius = AppRadius.medium
+        layer.cornerCurve = .continuous
+        clipsToBounds = true
+
+        backgroundColor = AppColor.background.withAlphaComponent(0.68)
+        indicatorView.hidesWhenStopped = false
+        indicatorView.color = AppColor.textSecondary
+
+        addSubviews(backgroundView, indicatorView)
+        [backgroundView, indicatorView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+
+        NSLayoutConstraint.activate([
+            backgroundView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            indicatorView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            indicatorView.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+
+        isAccessibilityElement = true
+        accessibilityLabel = "로딩 중"
+        accessibilityIdentifier = "loadingOverlayView"
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setLoading(_ isLoading: Bool) {
+        isHidden = isLoading == false
+        isUserInteractionEnabled = isLoading
+
+        if isLoading {
+            indicatorView.startAnimating()
+        } else {
+            indicatorView.stopAnimating()
+        }
+    }
+}
+
 final class IconActionButton: UIButton {
     enum Style {
         case plain
@@ -123,6 +196,7 @@ final class SearchInputView: UIControl, UITextFieldDelegate {
         textField.placeholder = placeholder
         textField.font = AppTypography.body
         textField.textColor = AppColor.textPrimary
+        textField.clearButtonMode = .whileEditing
         textField.returnKeyType = .search
         textField.delegate = self
         textField.addTarget(self, action: #selector(handleTextChanged(_:)), for: .editingChanged)
@@ -334,6 +408,13 @@ final class InlineToggleView: UIControl {
 
     var onToggle: ((Bool) -> Void)?
 
+    override var isEnabled: Bool {
+        didSet {
+            alpha = isEnabled ? 1 : 0.45
+            accessibilityTraits = isEnabled ? .button : [.button, .notEnabled]
+        }
+    }
+
     override var isSelected: Bool {
         didSet {
             iconView.image = UIImage(systemName: isSelected ? "checkmark.square.fill" : "square")
@@ -356,6 +437,7 @@ final class InlineToggleView: UIControl {
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.pinEdges(to: self)
         isSelected = false
+        isEnabled = true
         addTarget(self, action: #selector(toggleSelection), for: .touchUpInside)
     }
 
@@ -364,6 +446,7 @@ final class InlineToggleView: UIControl {
     }
 
     @objc private func toggleSelection() {
+        guard isEnabled else { return }
         isSelected.toggle()
         onToggle?(isSelected)
     }

@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 final class LibraryDetailViewController: BaseViewController {
     private let viewModel: LibraryDetailViewModel
@@ -138,6 +141,7 @@ private final class LibraryDetailView: UIView {
         mapPlaceholderLabel.textAlignment = .center
         mapPlaceholderLabel.font = AppTypography.caption
         mapPlaceholderLabel.textColor = AppColor.textSecondary
+        mapPlaceholderLabel.numberOfLines = 0
 
         addSubviews(headerView, scrollView)
         headerView.translatesAutoresizingMaskIntoConstraints = false
@@ -367,3 +371,19 @@ private final class LibraryDetailView: UIView {
         phoneRow.update(text: phone)
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("도서관 상세") {
+    let dependencies = AppDependencies.mock
+    let navigationController = UINavigationController()
+    let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
+
+    return LibraryDetailViewController(
+        viewModel: LibraryDetailViewModel(
+            libraryID: "library-yeoksam",
+            libraryRepository: dependencies.libraryRepository
+        ),
+        navigator: navigator
+    )
+}
+#endif

@@ -28,8 +28,11 @@ final class AppNavigator {
 
     func handle(_ route: AppRoute, from source: UIViewController) {
         switch route {
-        case .search:
-            navigationController.pushViewController(makeSearch(), animated: true)
+        case let .search(currentLocation, currentDistance):
+            navigationController.pushViewController(
+                makeSearch(currentLocation: currentLocation, currentDistance: currentDistance),
+                animated: true
+            )
         case .likes:
             navigationController.pushViewController(makeLikes(), animated: true)
         case .alerts:
@@ -65,8 +68,14 @@ final class AppNavigator {
     }
 
     private func makeHome() -> HomeViewController {
-        let viewModel = HomeViewModel(libraryRepository: dependencies.libraryRepository)
-        return HomeViewController(viewModel: viewModel, navigator: self)
+        let homeViewModel = HomeViewModel(libraryRepository: dependencies.libraryRepository)
+        let searchViewModel = SearchResultsViewModel(
+            searchRepository: dependencies.searchRepository,
+            libraryRepository: dependencies.libraryRepository,
+            currentLocation: homeViewModel.state.selectedLocation,
+            currentDistance: homeViewModel.state.selectedDistance
+        )
+        return HomeViewController(viewModel: homeViewModel, searchViewModel: searchViewModel, navigator: self)
     }
 
     private func makeLocationPicker(
@@ -80,10 +89,12 @@ final class AppNavigator {
         return LocationPickerViewController(viewModel: viewModel, onSelection: onSelection)
     }
 
-    private func makeSearch() -> SearchResultsViewController {
+    private func makeSearch(currentLocation: AddressSuggestion, currentDistance: DistanceOption) -> SearchResultsViewController {
         let viewModel = SearchResultsViewModel(
             searchRepository: dependencies.searchRepository,
-            libraryRepository: dependencies.libraryRepository
+            libraryRepository: dependencies.libraryRepository,
+            currentLocation: currentLocation,
+            currentDistance: currentDistance
         )
         return SearchResultsViewController(viewModel: viewModel, navigator: self)
     }

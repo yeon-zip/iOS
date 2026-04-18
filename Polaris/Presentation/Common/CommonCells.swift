@@ -8,9 +8,13 @@
 import UIKit
 
 final class MockBookCoverView: UIView {
+    private static let imageCache = NSCache<NSURL, UIImage>()
+
     private let gradientLayer = CAGradientLayer()
+    private let imageView = UIImageView()
     private let iconView = UIImageView(image: UIImage(systemName: "book.closed.fill"))
     private let accentCircle = UIView()
+    private var imageTask: Task<Void, Never>?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -19,16 +23,24 @@ final class MockBookCoverView: UIView {
         layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         clipsToBounds = true
 
+        imageView.contentMode = .scaleAspectFill
+        imageView.isHidden = true
         accentCircle.layer.cornerCurve = .continuous
         accentCircle.alpha = 0.22
         iconView.tintColor = UIColor.white.withAlphaComponent(0.95)
         iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30, weight: .regular)
 
-        addSubviews(accentCircle, iconView)
+        addSubviews(imageView, accentCircle, iconView)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
         accentCircle.translatesAutoresizingMaskIntoConstraints = false
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
             accentCircle.widthAnchor.constraint(equalToConstant: 96),
             accentCircle.heightAnchor.constraint(equalToConstant: 96),
             accentCircle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 28),
@@ -50,7 +62,10 @@ final class MockBookCoverView: UIView {
         accentCircle.layer.cornerRadius = accentCircle.bounds.width / 2
     }
 
-    func configure(seed: String) {
+    func configure(seed: String, imageURL: URL? = nil) {
+        imageTask?.cancel()
+        imageView.image = nil
+
         let palettes: [[UIColor]] = [
             [UIColor(hex: 0x5B8CFF), UIColor(hex: 0x8DB8FF)],
             [UIColor(hex: 0x2D4E86), UIColor(hex: 0x5D7EB3)],
@@ -67,6 +82,35 @@ final class MockBookCoverView: UIView {
         gradientLayer.startPoint = CGPoint(x: 0, y: 0)
         gradientLayer.endPoint = CGPoint(x: 1, y: 1)
         accentCircle.backgroundColor = UIColor.white
+        imageView.isHidden = true
+        iconView.isHidden = false
+        accentCircle.isHidden = false
+
+        guard let imageURL else { return }
+        if let cachedImage = Self.imageCache.object(forKey: imageURL as NSURL) {
+            applyLoadedImage(cachedImage)
+            return
+        }
+
+        imageTask = Task { [weak self] in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: imageURL)
+                guard Task.isCancelled == false, let image = UIImage(data: data) else { return }
+                Self.imageCache.setObject(image, forKey: imageURL as NSURL)
+                await MainActor.run {
+                    self?.applyLoadedImage(image)
+                }
+            } catch {
+                // Keep the gradient fallback when the cover image cannot be loaded.
+            }
+        }
+    }
+
+    private func applyLoadedImage(_ image: UIImage) {
+        imageView.image = image
+        imageView.isHidden = false
+        iconView.isHidden = true
+        accentCircle.isHidden = true
     }
 }
 
@@ -148,7 +192,7 @@ final class BookCarouselCell: UICollectionViewCell {
     func configure(viewData: BookCarouselItemViewData) {
         titleLabel.text = viewData.title
         authorLabel.text = viewData.subtitle
-        coverView.configure(seed: viewData.id)
+        coverView.configure(seed: viewData.id, imageURL: viewData.coverImageURL)
         let borderColor: UIColor
         let borderWidth: CGFloat
         if viewData.isSelected {
@@ -172,6 +216,7 @@ final class LibraryCardCell: UICollectionViewCell {
     private let containerView = CardContainerView()
     private let titleLabel = UILabel()
     private let distanceLabel = UILabel()
+    private let metadataStack = UIStackView()
     private let badgeStack = UIStackView()
     private let actionsStack = UIStackView()
     private let bellButton = IconActionButton(symbolName: "bell", accessibilityLabel: "알림 토글")
@@ -192,6 +237,12 @@ final class LibraryCardCell: UICollectionViewCell {
         distanceLabel.font = AppTypography.body
         distanceLabel.textColor = AppColor.textPrimary
 
+        metadataStack.axis = .vertical
+        metadataStack.spacing = AppSpacing.s
+        metadataStack.alignment = .leading
+        metadataStack.addArrangedSubview(distanceLabel)
+        metadataStack.addArrangedSubview(badgeStack)
+
         badgeStack.axis = .horizontal
         badgeStack.spacing = AppSpacing.s
         badgeStack.alignment = .center
@@ -202,8 +253,8 @@ final class LibraryCardCell: UICollectionViewCell {
         actionsStack.addArrangedSubview(bellButton)
         actionsStack.addArrangedSubview(heartButton)
 
-        containerView.addSubviews(titleLabel, distanceLabel, badgeStack, actionsStack)
-        [titleLabel, distanceLabel, badgeStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        containerView.addSubviews(titleLabel, metadataStack, actionsStack)
+        [titleLabel, metadataStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AppSpacing.l),
@@ -213,14 +264,10 @@ final class LibraryCardCell: UICollectionViewCell {
             actionsStack.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             actionsStack.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
 
-            distanceLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
-            distanceLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            distanceLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
-            distanceLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l),
-
-            badgeStack.leadingAnchor.constraint(equalTo: distanceLabel.trailingAnchor, constant: AppSpacing.s),
-            badgeStack.centerYAnchor.constraint(equalTo: distanceLabel.centerYAnchor),
-            badgeStack.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m)
+            metadataStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
+            metadataStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metadataStack.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
+            metadataStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l)
         ])
 
         bellButton.addAction(UIAction { [weak self] _ in
@@ -250,6 +297,7 @@ final class LibraryCardCell: UICollectionViewCell {
         titleLabel.text = viewData.title
         distanceLabel.text = viewData.distanceText
         bellButton.isHidden = viewData.showsBell == false
+        heartButton.isHidden = viewData.showsFavorite == false
         bellButton.setSymbolName(viewData.isBellActive ? "bell.fill" : "bell")
         bellButton.accessibilityLabel = viewData.isBellActive ? "알림 해제" : "알림 설정"
         bellButton.setForegroundColor(viewData.isBellActive ? AppColor.accent : AppColor.textTertiary)

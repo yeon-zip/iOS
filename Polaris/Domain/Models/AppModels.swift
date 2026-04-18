@@ -8,9 +8,9 @@
 import Foundation
 
 enum DistanceOption: String, CaseIterable, Hashable, Sendable {
-    case oneKm = "1km"
-    case twoKm = "2km"
     case threeKm = "3km"
+    case tenKm = "10km"
+    case twentyKm = "20km"
 }
 
 enum OperatingStatus: Hashable, Sendable {
@@ -113,6 +113,7 @@ struct BookSummary: Identifiable, Hashable, Sendable {
     let author: String
     let publisher: String
     let year: String
+    let coverImageURL: URL?
     let isFavorite: Bool
     let isAlertEnabled: Bool
     let loanStatus: LoanStatus?
@@ -124,6 +125,7 @@ struct BookDetail: Hashable, Sendable {
     let author: String
     let publisher: String
     let year: String
+    let coverImageURL: URL?
     let summary: String
 }
 

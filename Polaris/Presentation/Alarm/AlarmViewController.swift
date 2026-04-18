@@ -6,6 +6,9 @@
 //
 
 import UIKit
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 final class AlarmViewController: BaseViewController, UICollectionViewDelegate {
     private let viewModel: AlarmViewModel
@@ -51,7 +54,7 @@ final class AlarmViewController: BaseViewController, UICollectionViewDelegate {
 
     private func render(_ state: AlarmViewModel.State) {
         contentView.collectionView.backgroundView = state.sections.isEmpty
-            ? EmptyStateView(title: "알림이 없어요", message: "관심 도서에 알림을 켜두면 여기서 바로 확인할 수 있어요.")
+            ? EmptyStateView(title: "알림 API 미구현", message: "알림 API가 아직 제공되지 않았습니다.")
             : nil
         var snapshot = NSDiffableDataSourceSnapshot<AlertSection, AlertBookItemViewData>()
         AlertSection.allCases.forEach { section in
@@ -151,3 +154,16 @@ private final class AlarmRootView: UIView {
         }
     }
 }
+
+#if DEBUG && canImport(SwiftUI)
+#Preview("알림") {
+    let dependencies = AppDependencies.mock
+    let navigationController = UINavigationController()
+    let navigator = AppNavigator(navigationController: navigationController, dependencies: dependencies)
+
+    return AlarmViewController(
+        viewModel: AlarmViewModel(alertsRepository: dependencies.alertsRepository),
+        navigator: navigator
+    )
+}
+#endif

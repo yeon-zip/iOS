@@ -48,6 +48,7 @@ final class LikeViewModel {
                 distanceText: library.distanceText,
                 badges: [makeOperatingBadge(library.operatingStatus)],
                 showsBell: false,
+                showsFavorite: true,
                 isBellActive: library.isAlertEnabled,
                 isFavorite: library.isFavorite
             )
@@ -110,6 +111,7 @@ final class LikeViewModel {
             distanceText: item.distanceText,
             badges: item.badges,
             showsBell: item.showsBell,
+            showsFavorite: item.showsFavorite,
             isBellActive: item.isBellActive,
             isFavorite: item.isFavorite == false
         )
