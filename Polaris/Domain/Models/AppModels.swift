@@ -127,6 +127,7 @@ struct BookDetail: Hashable, Sendable {
     let year: String
     let coverImageURL: URL?
     let summary: String
+    let isFavorite: Bool
 }
 
 struct LibrarySummary: Identifiable, Hashable, Sendable {
@@ -156,6 +157,8 @@ struct LibraryDetail: Hashable, Sendable {
     let name: String
     let address: String
     let phone: String
+    let latitude: Double?
+    let longitude: Double?
     let hours: [OperatingHour]
     let regularHolidays: [HolidayEntry]
     let upcomingHolidays: [HolidayEntry]
@@ -170,8 +173,39 @@ struct AlertItem: Identifiable, Hashable, Sendable {
 }
 
 struct UserProfile: Hashable, Sendable {
-    let name: String
-    let subtitle: String
-    let headline: String
-    let location: String
+    let id: String
+    let provider: String
+    let role: String
+    let nickname: String
+    let email: String
+    let profileImageURL: URL?
+}
+
+struct AuthSession: Equatable, Sendable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+    let userId: Int64
+
+    func isAccessTokenValid(now: Date = Date(), leeway: TimeInterval = 30) -> Bool {
+        expiresAt.timeIntervalSince(now) > leeway
+    }
+}
+
+struct AuthLoginRequest: Equatable, Sendable {
+    let url: URL
+    let codeVerifier: String
+    let callbackScheme: String
+}
+
+enum AuthError: Error, Equatable {
+    case invalidLoginURL
+    case invalidCallback
+    case missingAuthorizationCode
+    case missingTargetID
+    case missingPendingLogin
+    case missingRefreshToken
+    case httpStatus(Int)
+    case networkFailure
+    case decodingFailure
 }

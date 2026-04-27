@@ -71,6 +71,7 @@ struct FavoriteBookItemViewData: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
+    let coverImageURL: URL?
     let badges: [BadgeContent]
     let isAlertEnabled: Bool
     let isFavorite: Bool
@@ -79,6 +80,7 @@ struct FavoriteBookItemViewData: Identifiable, Hashable, Sendable {
         lhs.id == rhs.id &&
         lhs.title == rhs.title &&
         lhs.subtitle == rhs.subtitle &&
+        lhs.coverImageURL == rhs.coverImageURL &&
         lhs.badges == rhs.badges &&
         lhs.isAlertEnabled == rhs.isAlertEnabled &&
         lhs.isFavorite == rhs.isFavorite
@@ -88,6 +90,7 @@ struct FavoriteBookItemViewData: Identifiable, Hashable, Sendable {
         hasher.combine(id)
         hasher.combine(title)
         hasher.combine(subtitle)
+        hasher.combine(coverImageURL)
         hasher.combine(badges)
         hasher.combine(isAlertEnabled)
         hasher.combine(isFavorite)

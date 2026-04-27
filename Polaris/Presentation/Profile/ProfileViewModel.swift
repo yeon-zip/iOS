@@ -11,6 +11,8 @@ import Foundation
 final class ProfileViewModel {
     struct State: Equatable {
         var profile: UserProfile?
+        var isLoading = false
+        var errorMessage: String?
     }
 
     var onStateChange: ((State) -> Void)?
@@ -24,7 +26,20 @@ final class ProfileViewModel {
     }
 
     func load() async {
-        state.profile = await profileRepository.fetchProfile()
+        state.isLoading = true
+        state.errorMessage = nil
+        onStateChange?(state)
+
+        do {
+            let profile = try await profileRepository.fetchProfile()
+            state.profile = profile
+            state.errorMessage = nil
+        } catch {
+            state.profile = nil
+            state.errorMessage = "프로필 정보를 불러오지 못했습니다."
+        }
+
+        state.isLoading = false
         onStateChange?(state)
     }
 

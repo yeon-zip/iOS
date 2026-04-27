@@ -34,6 +34,10 @@ final class BookDetailViewController: UIViewController {
     }
 
     private func bind() {
+        contentView.favoriteButton.addAction(UIAction { [weak self] _ in
+            Task { await self?.viewModel.didTapFavorite() }
+        }, for: .touchUpInside)
+
         viewModel.onStateChange = { [weak self] state in
             self?.render(state)
         }
@@ -46,6 +50,8 @@ final class BookDetailViewController: UIViewController {
         contentView.authorLabel.text = "저자: \(detail.author)"
         contentView.publisherLabel.text = "출판사: \(detail.publisher) · \(detail.year)"
         contentView.summaryLabel.text = detail.summary
+        contentView.updateFavoriteButton(isFavorite: state.isFavorite, isLoading: state.isMutatingFavorite)
+        contentView.updateFavoriteErrorMessage(state.errorMessage)
     }
 }
 
@@ -54,7 +60,9 @@ private final class BookDetailView: UIView {
     let titleLabel = UILabel()
     let authorLabel = UILabel()
     let publisherLabel = UILabel()
+    let favoriteButton = UIButton(type: .system)
     let summaryLabel = UILabel()
+    private let favoriteErrorLabel = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -64,10 +72,6 @@ private final class BookDetailView: UIView {
         let scrollView = UIScrollView()
         let contentContainer = UIView()
         let metaCard = CardContainerView()
-        let decisionCard = CardContainerView()
-        let decisionTitle = UILabel()
-        let yesButton = UIButton(type: .system)
-        let noButton = UIButton(type: .system)
         let summaryTitle = UILabel()
 
         titleLabel.font = AppTypography.hero
@@ -77,6 +81,14 @@ private final class BookDetailView: UIView {
         publisherLabel.font = AppTypography.caption
         publisherLabel.textColor = AppColor.textSecondary
 
+        favoriteButton.layer.cornerCurve = .continuous
+        favoriteButton.accessibilityIdentifier = "bookDetail.favoriteButton"
+
+        favoriteErrorLabel.font = AppTypography.caption
+        favoriteErrorLabel.textColor = AppColor.danger
+        favoriteErrorLabel.numberOfLines = 2
+        favoriteErrorLabel.isHidden = true
+
         summaryTitle.text = "책 소개"
         summaryTitle.font = AppTypography.section
         summaryTitle.textColor = AppColor.textPrimary
@@ -84,36 +96,6 @@ private final class BookDetailView: UIView {
         summaryLabel.font = AppTypography.body
         summaryLabel.textColor = AppColor.textPrimary
         summaryLabel.numberOfLines = 0
-
-        decisionTitle.text = "소장 투표 API 미구현"
-        decisionTitle.font = AppTypography.headline
-        decisionTitle.textColor = AppColor.textPrimary
-
-        var yesConfiguration = UIButton.Configuration.filled()
-        yesConfiguration.cornerStyle = .capsule
-        yesConfiguration.baseBackgroundColor = AppColor.accent
-        yesConfiguration.baseForegroundColor = .white
-        yesConfiguration.contentInsets = .init(top: 10, leading: 18, bottom: 10, trailing: 18)
-        yesConfiguration.title = "예"
-        yesConfiguration.image = UIImage(systemName: "hand.thumbsup.fill")
-        yesButton.configuration = yesConfiguration
-
-        var noConfiguration = UIButton.Configuration.filled()
-        noConfiguration.cornerStyle = .capsule
-        noConfiguration.baseBackgroundColor = AppColor.surface
-        noConfiguration.baseForegroundColor = AppColor.textSecondary
-        noConfiguration.background.strokeColor = AppColor.line
-        noConfiguration.background.strokeWidth = 1
-        noConfiguration.contentInsets = .init(top: 10, leading: 18, bottom: 10, trailing: 18)
-        noConfiguration.title = "아니오"
-        noConfiguration.image = UIImage(systemName: "hand.thumbsdown")
-        noButton.configuration = noConfiguration
-
-        [yesButton, noButton].forEach { button in
-            button.layer.cornerCurve = .continuous
-            button.isEnabled = false
-            button.alpha = 0.5
-        }
 
         addSubview(scrollView)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -129,14 +111,14 @@ private final class BookDetailView: UIView {
             contentContainer.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor)
         ])
 
-        contentContainer.addSubviews(metaCard, decisionCard, summaryTitle, summaryLabel)
-        [metaCard, decisionCard, summaryTitle, summaryLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        contentContainer.addSubviews(metaCard, summaryTitle, summaryLabel)
+        [metaCard, summaryTitle, summaryLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
-        metaCard.addSubviews(coverView, titleLabel, authorLabel, publisherLabel)
-        [coverView, titleLabel, authorLabel, publisherLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        metaCard.addSubviews(coverView, titleLabel, authorLabel, publisherLabel, favoriteButton, favoriteErrorLabel)
+        [coverView, titleLabel, authorLabel, publisherLabel, favoriteButton, favoriteErrorLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
-        decisionCard.addSubviews(decisionTitle, yesButton, noButton)
-        [decisionTitle, yesButton, noButton].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        let favoriteButtonTopConstraint = favoriteButton.topAnchor.constraint(equalTo: coverView.bottomAnchor, constant: AppSpacing.l)
+        favoriteButtonTopConstraint.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
             metaCard.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: AppSpacing.xxl),
@@ -159,29 +141,21 @@ private final class BookDetailView: UIView {
             publisherLabel.topAnchor.constraint(equalTo: authorLabel.bottomAnchor, constant: AppSpacing.xs),
             publisherLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             publisherLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            publisherLabel.bottomAnchor.constraint(lessThanOrEqualTo: metaCard.bottomAnchor, constant: -AppSpacing.l),
+
+            favoriteButtonTopConstraint,
+            favoriteButton.topAnchor.constraint(greaterThanOrEqualTo: publisherLabel.bottomAnchor, constant: AppSpacing.l),
+            favoriteButton.leadingAnchor.constraint(equalTo: metaCard.leadingAnchor, constant: AppSpacing.l),
+            favoriteButton.trailingAnchor.constraint(equalTo: metaCard.trailingAnchor, constant: -AppSpacing.l),
+            favoriteButton.heightAnchor.constraint(equalToConstant: 44),
+
+            favoriteErrorLabel.topAnchor.constraint(equalTo: favoriteButton.bottomAnchor, constant: AppSpacing.s),
+            favoriteErrorLabel.leadingAnchor.constraint(equalTo: favoriteButton.leadingAnchor),
+            favoriteErrorLabel.trailingAnchor.constraint(equalTo: favoriteButton.trailingAnchor),
+            favoriteErrorLabel.bottomAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: -AppSpacing.l),
 
             metaCard.bottomAnchor.constraint(greaterThanOrEqualTo: coverView.bottomAnchor, constant: AppSpacing.l),
-            metaCard.bottomAnchor.constraint(greaterThanOrEqualTo: publisherLabel.bottomAnchor, constant: AppSpacing.l),
 
-            decisionCard.topAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: AppSpacing.l),
-            decisionCard.leadingAnchor.constraint(equalTo: metaCard.leadingAnchor),
-            decisionCard.trailingAnchor.constraint(equalTo: metaCard.trailingAnchor),
-
-            decisionTitle.topAnchor.constraint(equalTo: decisionCard.topAnchor, constant: AppSpacing.l),
-            decisionTitle.leadingAnchor.constraint(equalTo: decisionCard.leadingAnchor, constant: AppSpacing.l),
-            decisionTitle.trailingAnchor.constraint(equalTo: decisionCard.trailingAnchor, constant: -AppSpacing.l),
-
-            yesButton.topAnchor.constraint(equalTo: decisionTitle.bottomAnchor, constant: AppSpacing.l),
-            yesButton.leadingAnchor.constraint(equalTo: decisionTitle.leadingAnchor),
-            yesButton.bottomAnchor.constraint(equalTo: decisionCard.bottomAnchor, constant: -AppSpacing.l),
-
-            noButton.topAnchor.constraint(equalTo: yesButton.topAnchor),
-            noButton.leadingAnchor.constraint(equalTo: yesButton.trailingAnchor, constant: AppSpacing.m),
-            noButton.trailingAnchor.constraint(lessThanOrEqualTo: decisionCard.trailingAnchor, constant: -AppSpacing.l),
-            noButton.bottomAnchor.constraint(equalTo: yesButton.bottomAnchor),
-
-            summaryTitle.topAnchor.constraint(equalTo: decisionCard.bottomAnchor, constant: AppSpacing.xxl),
+            summaryTitle.topAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: AppSpacing.xxl),
             summaryTitle.leadingAnchor.constraint(equalTo: metaCard.leadingAnchor),
             summaryTitle.trailingAnchor.constraint(equalTo: metaCard.trailingAnchor),
 
@@ -195,6 +169,26 @@ private final class BookDetailView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    func updateFavoriteButton(isFavorite: Bool, isLoading: Bool) {
+        var configuration = UIButton.Configuration.filled()
+        configuration.cornerStyle = .medium
+        configuration.baseBackgroundColor = isFavorite ? AppColor.heart : AppColor.accent
+        configuration.baseForegroundColor = .white
+        configuration.image = UIImage(systemName: isFavorite ? "heart.fill" : "heart")
+        configuration.imagePadding = AppSpacing.s
+        configuration.title = isFavorite ? "책 찜 해제" : "책 찜하기"
+        configuration.contentInsets = .init(top: 12, leading: 16, bottom: 12, trailing: 16)
+        favoriteButton.configuration = configuration
+        favoriteButton.isEnabled = isLoading == false
+        favoriteButton.alpha = isLoading ? 0.6 : 1
+        favoriteButton.accessibilityLabel = isFavorite ? "책 찜 해제" : "책 찜하기"
+    }
+
+    func updateFavoriteErrorMessage(_ message: String?) {
+        favoriteErrorLabel.text = message
+        favoriteErrorLabel.isHidden = message == nil
+    }
 }
 
 #if DEBUG && canImport(SwiftUI)
@@ -204,7 +198,8 @@ private final class BookDetailView: UIView {
     return BookDetailViewController(
         viewModel: BookDetailViewModel(
             bookID: "book-arond-2",
-            bookRepository: dependencies.bookRepository
+            bookRepository: dependencies.bookRepository,
+            favoritesRepository: dependencies.favoritesRepository
         )
     )
 }

@@ -134,7 +134,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
                 self?.viewModel.didToggleLibraryAlert(id: item.id)
             }
             cell.onHeartTap = { [weak self] in
-                self?.viewModel.didToggleLibraryFavorite(id: item.id)
+                Task { await self?.viewModel.didToggleLibraryFavorite(id: item.id) }
             }
         }
 

@@ -14,17 +14,23 @@ final class PolarisAPIClient {
         self.session = session
     }
 
-    func get<Response: Decodable>(_ path: String, queryItems: [URLQueryItem] = []) async -> Response? {
-        guard let url = PolarisAPI.makeURL(path: path, queryItems: queryItems) else { return nil }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = PolarisAPI.requestTimeout
+    func get<Response: Decodable>(
+        _ path: String,
+        queryItems: [URLQueryItem] = [],
+        accessToken: String? = nil
+    ) async -> Response? {
+        guard let request = makeRequest(
+            path: path,
+            method: .get,
+            queryItems: queryItems,
+            accessToken: accessToken
+        ) else { return nil }
 
         do {
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   200..<300 ~= httpResponse.statusCode else {
-                debugLog("HTTP request failed: \(url.absoluteString)")
+                debugLog("HTTP request failed: \(request.url?.absoluteString ?? path)")
                 if let httpResponse = response as? HTTPURLResponse {
                     debugLog("Status code: \(httpResponse.statusCode)")
                 }
@@ -33,16 +39,131 @@ final class PolarisAPIClient {
             do {
                 return try JSONDecoder.polaris.decode(Response.self, from: data)
             } catch {
-                debugLog("Decoding failed for: \(url.absoluteString)")
+                debugLog("Decoding failed for: \(request.url?.absoluteString ?? path)")
                 debugLog("\(error)")
                 return nil
             }
         } catch {
-            debugLog("Network request failed: \(url.absoluteString)")
+            debugLog("Network request failed: \(request.url?.absoluteString ?? path)")
             debugLog("\(error)")
             return nil
         }
     }
+
+    func send(_ path: String, method: HTTPMethod, accessToken: String? = nil) async -> Bool {
+        guard let request = makeRequest(
+            path: path,
+            method: method,
+            queryItems: [],
+            accessToken: accessToken
+        ) else { return false }
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  200..<300 ~= httpResponse.statusCode else {
+                debugLog("HTTP mutation failed: \(request.url?.absoluteString ?? path)")
+                if let httpResponse = response as? HTTPURLResponse {
+                    debugLog("Status code: \(httpResponse.statusCode)")
+                }
+                return false
+            }
+            return true
+        } catch {
+            debugLog("Network mutation failed: \(request.url?.absoluteString ?? path)")
+            debugLog("\(error)")
+            return false
+        }
+    }
+
+    func getOrThrow<Response: Decodable>(
+        _ path: String,
+        queryItems: [URLQueryItem] = [],
+        accessToken: String? = nil
+    ) async throws -> Response {
+        guard let request = makeRequest(
+            path: path,
+            method: .get,
+            queryItems: queryItems,
+            accessToken: accessToken
+        ) else { throw PolarisAPIClientError.invalidURL }
+
+        let data = try await perform(request)
+        do {
+            return try JSONDecoder.polaris.decode(Response.self, from: data)
+        } catch {
+            debugLog("Decoding failed for: \(request.url?.absoluteString ?? path)")
+            debugLog("\(error)")
+            throw PolarisAPIClientError.decodingFailure
+        }
+    }
+
+    func sendOrThrow(_ path: String, method: HTTPMethod, accessToken: String? = nil) async throws {
+        guard let request = makeRequest(
+            path: path,
+            method: method,
+            queryItems: [],
+            accessToken: accessToken
+        ) else { throw PolarisAPIClientError.invalidURL }
+
+        _ = try await perform(request)
+    }
+
+    private func makeRequest(
+        path: String,
+        method: HTTPMethod,
+        queryItems: [URLQueryItem],
+        accessToken: String?
+    ) -> URLRequest? {
+        guard let url = PolarisAPI.makeURL(path: path, queryItems: queryItems) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.timeoutInterval = PolarisAPI.requestTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accessToken, accessToken.isEmpty == false {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private func perform(_ request: URLRequest) async throws -> Data {
+        let data: Data
+        let response: URLResponse
+
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            debugLog("Network request failed: \(request.url?.absoluteString ?? "")")
+            debugLog("\(error)")
+            throw PolarisAPIClientError.networkFailure
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PolarisAPIClientError.networkFailure
+        }
+
+        guard 200..<300 ~= httpResponse.statusCode else {
+            debugLog("HTTP request failed: \(request.url?.absoluteString ?? "")")
+            debugLog("Status code: \(httpResponse.statusCode)")
+            throw PolarisAPIClientError.httpStatus(httpResponse.statusCode)
+        }
+
+        return data
+    }
+}
+
+enum HTTPMethod: String {
+    case get = "GET"
+    case post = "POST"
+    case delete = "DELETE"
+}
+
+enum PolarisAPIClientError: Error, Equatable {
+    case invalidURL
+    case httpStatus(Int)
+    case networkFailure
+    case decodingFailure
 }
 
 private func debugLog(_ message: String) {
@@ -152,6 +273,124 @@ private struct APIPageResponse<Item: Decodable>: Decodable {
     let items: [Item]
 }
 
+private struct APICurrentUserDTO: Decodable {
+    let id: String
+    let provider: String?
+    let role: String?
+    let nickname: String?
+    let email: String?
+    let profileImageURLString: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case provider
+        case role
+        case nickname
+        case email
+        case profileImageURLString = "profileImageUrl"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleString(forKey: .id)
+        provider = try container.decodeFlexibleOptionalString(forKey: .provider)
+        role = try container.decodeFlexibleOptionalString(forKey: .role)
+        nickname = try container.decodeIfPresent(String.self, forKey: .nickname)
+        email = try container.decodeIfPresent(String.self, forKey: .email)
+        profileImageURLString = try container.decodeFlexibleOptionalString(forKey: .profileImageURLString)
+    }
+
+    func toModel() -> UserProfile {
+        UserProfile(
+            id: id,
+            provider: nonEmpty(provider, placeholder: "제공자 정보 없음"),
+            role: nonEmpty(role, placeholder: "권한 정보 없음"),
+            nickname: nonEmpty(nickname, placeholder: "북극성 사용자"),
+            email: nonEmpty(email, placeholder: "이메일 정보 없음"),
+            profileImageURL: profileImageURLString.flatMap(URL.init(string:))
+        )
+    }
+}
+
+private struct APIBookmarkedBooksResponse: Decodable {
+    let items: [APIBookmarkedBookDTO]
+}
+
+private struct APIBookmarkedBookDTO: Decodable {
+    let isbn: String
+    let title: String?
+    let author: String?
+    let coverImageURLString: String?
+
+    enum CodingKeys: String, CodingKey {
+        case isbn
+        case title
+        case author
+        case coverImageURLString = "coverImageUrl"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isbn = try container.decodeFlexibleString(forKey: .isbn)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+        coverImageURLString = try container.decodeFlexibleOptionalString(forKey: .coverImageURLString)
+    }
+
+    func toSummary() -> BookSummary {
+        BookSummary(
+            id: isbn,
+            title: nonEmpty(title, placeholder: "제목 정보 없음"),
+            author: nonEmpty(author, placeholder: "저자 정보 없음"),
+            publisher: "",
+            year: "",
+            coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
+            isFavorite: true,
+            isAlertEnabled: false,
+            loanStatus: nil
+        )
+    }
+}
+
+private struct APIBookmarkedLibrariesResponse: Decodable {
+    let items: [APIBookmarkedLibraryDTO]
+}
+
+private struct APIBookmarkedLibraryDTO: Decodable {
+    let libraryId: String
+    let name: String?
+    let address: String?
+
+    enum CodingKeys: String, CodingKey {
+        case libraryId
+        case id
+        case name
+        case address
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        libraryId = try container.decodeFlexibleOptionalString(forKey: .libraryId)
+            ?? container.decodeFlexibleString(forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        address = try container.decodeIfPresent(String.self, forKey: .address)
+    }
+
+    func toSummary() -> LibrarySummary {
+        LibrarySummary(
+            id: libraryId,
+            name: nonEmpty(name, placeholder: "도서관명 정보 없음"),
+            address: nonEmpty(address, placeholder: "주소 정보 없음"),
+            phone: "",
+            distanceText: nonEmpty(address, placeholder: "주소 정보 없음"),
+            operatingStatus: .open,
+            loanStatus: nil,
+            isFavorite: true,
+            isAlertEnabled: false
+        )
+    }
+}
+
 private struct APIBookDTO: Decodable {
     let isbn: String
     let title: String?
@@ -160,6 +399,7 @@ private struct APIBookDTO: Decodable {
     let description: String?
     let publicationDate: String?
     let coverImageURLString: String?
+    let isBookmarked: Bool
 
     enum CodingKeys: String, CodingKey {
         case isbn
@@ -169,6 +409,8 @@ private struct APIBookDTO: Decodable {
         case description
         case publicationDate
         case coverImageURLString = "coverImageUrl"
+        case isBookmarked
+        case bookmarked
     }
 
     init(from decoder: Decoder) throws {
@@ -180,6 +422,9 @@ private struct APIBookDTO: Decodable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         publicationDate = try container.decodeFlexibleOptionalString(forKey: .publicationDate)
         coverImageURLString = try container.decodeFlexibleOptionalString(forKey: .coverImageURLString)
+        isBookmarked = try container.decodeFlexibleOptionalBool(forKey: .isBookmarked)
+            ?? container.decodeFlexibleOptionalBool(forKey: .bookmarked)
+            ?? false
     }
 
     func toSummary() -> BookSummary {
@@ -190,7 +435,7 @@ private struct APIBookDTO: Decodable {
             publisher: nonEmpty(publisher, placeholder: "API 응답 필드 추가 필요(출판사)"),
             year: publicationYearText(from: publicationDate),
             coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
-            isFavorite: false,
+            isFavorite: isBookmarked,
             isAlertEnabled: false,
             loanStatus: nil
         )
@@ -204,7 +449,8 @@ private struct APIBookDTO: Decodable {
             publisher: nonEmpty(publisher, placeholder: "API 응답 필드 추가 필요(출판사)"),
             year: publicationYearText(from: publicationDate),
             coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
-            summary: nonEmpty(description?.normalizedMultilineText, placeholder: "API 응답 필드 추가 필요(도서 설명)")
+            summary: nonEmpty(description?.normalizedMultilineText, placeholder: "도서 설명 정보 없음"),
+            isFavorite: isBookmarked
         )
     }
 }
@@ -219,6 +465,7 @@ private struct APINearbyLibraryDTO: Decodable {
     let tel: String?
     let distanceKm: Double?
     let openNow: Bool
+    let isBookmarked: Bool
 
     enum CodingKeys: String, CodingKey {
         case libraryId
@@ -230,6 +477,8 @@ private struct APINearbyLibraryDTO: Decodable {
         case tel
         case distanceKm
         case openNow
+        case isBookmarked
+        case bookmarked
     }
 
     init(from decoder: Decoder) throws {
@@ -242,7 +491,10 @@ private struct APINearbyLibraryDTO: Decodable {
         homepageURLString = try container.decodeFlexibleOptionalString(forKey: .homepageURLString)
         tel = try container.decodeFlexibleOptionalString(forKey: .tel)
         distanceKm = try container.decodeFlexibleOptionalDouble(forKey: .distanceKm)
-        openNow = try container.decode(Bool.self, forKey: .openNow)
+        openNow = try container.decodeFlexibleOptionalBool(forKey: .openNow) ?? false
+        isBookmarked = try container.decodeFlexibleOptionalBool(forKey: .isBookmarked)
+            ?? container.decodeFlexibleOptionalBool(forKey: .bookmarked)
+            ?? false
     }
 
     func toSummary(loanStatus: LoanStatus? = nil) -> LibrarySummary {
@@ -254,7 +506,7 @@ private struct APINearbyLibraryDTO: Decodable {
             distanceText: distanceText(from: distanceKm),
             operatingStatus: openNow ? .open : .closed,
             loanStatus: loanStatus,
-            isFavorite: false,
+            isFavorite: isBookmarked,
             isAlertEnabled: false
         )
     }
@@ -271,6 +523,7 @@ private struct APIBookAvailabilityDTO: Decodable {
     let loanAvailable: Bool?
     let availabilityStatus: String?
     let openNow: Bool
+    let isBookmarked: Bool
 
     enum CodingKeys: String, CodingKey {
         case libraryId
@@ -283,6 +536,8 @@ private struct APIBookAvailabilityDTO: Decodable {
         case loanAvailable
         case availabilityStatus
         case openNow
+        case isBookmarked
+        case bookmarked
     }
 
     init(from decoder: Decoder) throws {
@@ -296,7 +551,10 @@ private struct APIBookAvailabilityDTO: Decodable {
         hasBook = try container.decodeFlexibleOptionalBool(forKey: .hasBook)
         loanAvailable = try container.decodeFlexibleOptionalBool(forKey: .loanAvailable)
         availabilityStatus = try container.decodeFlexibleOptionalString(forKey: .availabilityStatus)
-        openNow = try container.decode(Bool.self, forKey: .openNow)
+        openNow = try container.decodeFlexibleOptionalBool(forKey: .openNow) ?? false
+        isBookmarked = try container.decodeFlexibleOptionalBool(forKey: .isBookmarked)
+            ?? container.decodeFlexibleOptionalBool(forKey: .bookmarked)
+            ?? false
     }
 
     var shouldDisplay: Bool {
@@ -316,7 +574,7 @@ private struct APIBookAvailabilityDTO: Decodable {
             distanceText: distanceText(from: distanceKm),
             operatingStatus: openNow ? .open : .closed,
             loanStatus: inferredLoanStatus,
-            isFavorite: false,
+            isFavorite: isBookmarked,
             isAlertEnabled: false
         )
     }
@@ -350,19 +608,24 @@ private struct APILibraryDetailDTO: Decodable {
     let homepageURLString: String?
     let tel: String?
     let openNow: Bool
+    let isBookmarked: Bool
     let todayOperatingHour: APIOperatingHourDTO?
     let weeklyOperatingHours: [APIOperatingHourDTO]
     let closedRules: [APIClosedRuleDTO]
 
     enum CodingKeys: String, CodingKey {
         case libraryId
+        case id
         case name
         case address
         case latitude
         case longitude
         case homepageURLString = "homepageUrl"
         case tel
+        case phone
         case openNow
+        case isBookmarked
+        case bookmarked
         case todayOperatingHour
         case weeklyOperatingHours
         case closedRules
@@ -370,14 +633,19 @@ private struct APILibraryDetailDTO: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        libraryId = try container.decodeFlexibleString(forKey: .libraryId)
+        libraryId = try container.decodeFlexibleOptionalString(forKey: .libraryId)
+            ?? container.decodeFlexibleString(forKey: .id)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         address = try container.decodeIfPresent(String.self, forKey: .address)
         latitude = try container.decodeFlexibleOptionalDouble(forKey: .latitude)
         longitude = try container.decodeFlexibleOptionalDouble(forKey: .longitude)
         homepageURLString = try container.decodeFlexibleOptionalString(forKey: .homepageURLString)
         tel = try container.decodeFlexibleOptionalString(forKey: .tel)
-        openNow = try container.decode(Bool.self, forKey: .openNow)
+            ?? container.decodeFlexibleOptionalString(forKey: .phone)
+        openNow = try container.decodeFlexibleOptionalBool(forKey: .openNow) ?? false
+        isBookmarked = try container.decodeFlexibleOptionalBool(forKey: .isBookmarked)
+            ?? container.decodeFlexibleOptionalBool(forKey: .bookmarked)
+            ?? false
         todayOperatingHour = try container.decodeIfPresent(APIOperatingHourDTO.self, forKey: .todayOperatingHour)
         weeklyOperatingHours = try container.decodeIfPresent([APIOperatingHourDTO].self, forKey: .weeklyOperatingHours) ?? []
         closedRules = try container.decodeIfPresent([APIClosedRuleDTO].self, forKey: .closedRules) ?? []
@@ -387,23 +655,25 @@ private struct APILibraryDetailDTO: Decodable {
         let weeklyHours = weeklyOperatingHours.sorted { $0.sortKey < $1.sortKey }.map { $0.toModel() }
         let hours: [OperatingHour]
         if weeklyHours.isEmpty {
-            hours = [todayOperatingHour?.toTodayModel() ?? OperatingHour(day: "오늘", hoursText: "API 응답 필드 추가 필요(운영 시간)", isClosed: false)]
+            hours = [
+                todayOperatingHour?.toTodayModel()
+                    ?? OperatingHour(day: "운영 시간", hoursText: "정보 없음", isClosed: false)
+            ]
         } else {
             hours = weeklyHours
         }
-        let regularHolidays = closedRules.compactMap { $0.toHolidayEntry() }
-        let regularHolidayEntries = regularHolidays.isEmpty
-            ? [HolidayEntry(title: "정기 휴관일 정보 없음")]
-            : regularHolidays
+        let regularHolidays = closedRules.compactMap { $0.toHolidayEntry() }.uniquePreservingOrder()
 
         return LibraryDetail(
             id: libraryId,
             name: nonEmpty(name, placeholder: "API 응답 필드 추가 필요(도서관명)"),
             address: nonEmpty(address, placeholder: "API 응답 필드 추가 필요(도서관 주소)"),
             phone: nonEmpty(tel, placeholder: "API 응답 필드 추가 필요(도서관 전화번호)"),
+            latitude: latitude,
+            longitude: longitude,
             hours: hours,
-            regularHolidays: regularHolidayEntries,
-            upcomingHolidays: [HolidayEntry(title: "API 응답 필드 추가 필요(예정된 휴관일)")],
+            regularHolidays: regularHolidays,
+            upcomingHolidays: [],
             mapDescription: mapDescription(latitude: latitude, longitude: longitude, homepageURLString: homepageURLString)
         )
     }
@@ -429,9 +699,9 @@ private struct APIOperatingHourDTO: Decodable {
         } else {
             weekday = nil
         }
-        openTime = try container.decodeIfPresent(String.self, forKey: .openTime)
-        closeTime = try container.decodeIfPresent(String.self, forKey: .closeTime)
-        closed = try container.decode(Bool.self, forKey: .closed)
+        openTime = try container.decodeFlexibleOptionalString(forKey: .openTime)
+        closeTime = try container.decodeFlexibleOptionalString(forKey: .closeTime)
+        closed = try container.decodeFlexibleOptionalBool(forKey: .closed) ?? false
     }
 
     var sortKey: Int {
@@ -455,9 +725,9 @@ private struct APIOperatingHourDTO: Decodable {
             return "휴관"
         }
         if let openTime, let closeTime, openTime.isEmpty == false, closeTime.isEmpty == false {
-            return "\(openTime) - \(closeTime)"
+            return operatingTimeRangeText(openTime: openTime, closeTime: closeTime)
         }
-        return "API 응답 필드 추가 필요(운영 시간)"
+        return "정보 없음"
     }
 }
 
@@ -505,7 +775,12 @@ private struct APIClosedRuleDTO: Decodable {
             return HolidayEntry(title: "매주 \(weekdayTitle(for: weekday))")
         }
         if let ruleType, ruleType.isEmpty == false {
-            return HolidayEntry(title: "정기 휴관일(\(ruleType))")
+            switch ruleType.uppercased() {
+            case "HOLIDAY", "LEGAL_HOLIDAY", "PUBLIC_HOLIDAY":
+                return HolidayEntry(title: "법정 공휴일")
+            default:
+                return HolidayEntry(title: ruleType)
+            }
         }
         return nil
     }
@@ -516,6 +791,13 @@ private func nonEmpty(_ value: String?, placeholder: String) -> String {
         return placeholder
     }
     return value
+}
+
+private extension Array where Element: Hashable {
+    func uniquePreservingOrder() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
 }
 
 private func publicationYearText(from rawValue: String?) -> String {
@@ -536,6 +818,44 @@ private func distanceText(from distanceKm: Double?) -> String {
     return String(format: "%.1fkm", distanceKm)
 }
 
+private func operatingTimeRangeText(openTime: String, closeTime: String) -> String {
+    let range = normalizedTimeRange(start: openTime, end: closeTime)
+    return "\(clockText(range.start)) ~ \(clockText(range.end))"
+}
+
+private func normalizedTimeRange(start: String, end: String) -> (start: String, end: String) {
+    guard let startMinutes = minutesSinceMidnight(from: start),
+          let endMinutes = minutesSinceMidnight(from: end),
+          startMinutes > endMinutes else {
+        return (start, end)
+    }
+    return (end, start)
+}
+
+private func minutesSinceMidnight(from rawValue: String) -> Int? {
+    let parts = rawValue.split(separator: ":").compactMap { Int($0) }
+    guard let hour = parts.first else { return nil }
+    let minute = parts.count > 1 ? parts[1] : 0
+    return hour * 60 + minute
+}
+
+private func clockText(_ rawValue: String) -> String {
+    let parts = rawValue.split(separator: ":").compactMap { Int($0) }
+    guard let hour24 = parts.first else { return rawValue }
+
+    let minute = parts.count > 1 ? parts[1] : 0
+    let period = hour24 < 12 ? "오전" : "오후"
+    let hour12 = {
+        let value = hour24 % 12
+        return value == 0 ? 12 : value
+    }()
+
+    if minute == 0 {
+        return "\(period) \(hour12)시"
+    }
+    return "\(period) \(hour12)시 \(minute)분"
+}
+
 private func mapDescription(latitude: Double?, longitude: Double?, homepageURLString: String?) -> String {
     var lines: [String] = []
     if let latitude, let longitude {
@@ -553,19 +873,19 @@ private func mapDescription(latitude: Double?, longitude: Double?, homepageURLSt
 private func weekdayTitle(for weekday: Int?) -> String {
     switch weekday {
     case 1:
-        return "월요일"
-    case 2:
-        return "화요일"
-    case 3:
-        return "수요일"
-    case 4:
-        return "목요일"
-    case 5:
-        return "금요일"
-    case 6:
-        return "토요일"
-    case 7:
         return "일요일"
+    case 2:
+        return "월요일"
+    case 3:
+        return "화요일"
+    case 4:
+        return "수요일"
+    case 5:
+        return "목요일"
+    case 6:
+        return "금요일"
+    case 7:
+        return "토요일"
     default:
         return "요일 정보 없음"
     }
@@ -708,13 +1028,152 @@ struct LiveLibraryRepository: LibraryRepository {
     }
 }
 
-struct UnavailableFavoritesRepository: FavoritesRepository {
-    func fetchFavoriteBooks() async -> [BookSummary] {
-        []
+struct LiveFavoritesRepository: FavoritesRepository {
+    private let apiClient: PolarisAPIClient
+    private let authRepository: any AuthRepository
+
+    init(apiClient: PolarisAPIClient, authRepository: any AuthRepository) {
+        self.apiClient = apiClient
+        self.authRepository = authRepository
     }
 
-    func fetchFavoriteLibraries() async -> [LibrarySummary] {
-        []
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
+        let response: APIBookmarkedBooksResponse = try await authorizedGet("users/me/bookmarked-books")
+        return response.items.map { $0.toSummary() }
+    }
+
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
+        let response: APIBookmarkedLibrariesResponse = try await authorizedGet("users/me/bookmarked-libraries")
+        return response.items.map { $0.toSummary() }
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+        guard id.isEmpty == false else { throw PolarisAPIClientError.invalidURL }
+        try await authorizedSend(
+            "books/\(id)/bookmark",
+            method: isFavorite ? .post : .delete
+        )
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
+        guard id.isEmpty == false else { throw PolarisAPIClientError.invalidURL }
+        try await authorizedSend(
+            "libraries/\(id)/bookmark",
+            method: isFavorite ? .post : .delete
+        )
+    }
+
+    private func authorizedGet<Response: Decodable>(_ path: String) async throws -> Response {
+        let session = try await restoredSession()
+        do {
+            return try await apiClient.getOrThrow(path, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                return try await apiClient.getOrThrow(path, accessToken: refreshedSession.accessToken)
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func authorizedSend(_ path: String, method: HTTPMethod) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendOrThrow(path, method: method, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendOrThrow(path, method: method, accessToken: refreshedSession.accessToken)
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func restoredSession() async throws -> AuthSession {
+        guard let session = await authRepository.restoreSession() else {
+            throw RepositoryError.unauthenticated
+        }
+        return session
+    }
+
+    private func refreshedSessionOrClear() async throws -> AuthSession {
+        do {
+            return try await authRepository.refresh()
+        } catch {
+            await authRepository.clearLocalSession()
+            throw error
+        }
+    }
+}
+
+struct LiveProfileRepository: ProfileRepository {
+    private let apiClient: PolarisAPIClient
+    private let authRepository: any AuthRepository
+
+    init(apiClient: PolarisAPIClient, authRepository: any AuthRepository) {
+        self.apiClient = apiClient
+        self.authRepository = authRepository
+    }
+
+    func fetchProfile() async throws -> UserProfile {
+        let session = try await restoredSession()
+        do {
+            let response: APICurrentUserDTO = try await apiClient.getOrThrow(
+                "users/me",
+                accessToken: session.accessToken
+            )
+            return response.toModel()
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                let response: APICurrentUserDTO = try await apiClient.getOrThrow(
+                    "users/me",
+                    accessToken: refreshedSession.accessToken
+                )
+                return response.toModel()
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func restoredSession() async throws -> AuthSession {
+        guard let session = await authRepository.restoreSession() else {
+            throw RepositoryError.unauthenticated
+        }
+        return session
+    }
+
+    private func refreshedSessionOrClear() async throws -> AuthSession {
+        do {
+            return try await authRepository.refresh()
+        } catch {
+            await authRepository.clearLocalSession()
+            throw error
+        }
+    }
+}
+
+struct UnavailableFavoritesRepository: FavoritesRepository {
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
+        throw RepositoryError.unavailable
+    }
+
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
+        throw RepositoryError.unavailable
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+        throw RepositoryError.unavailable
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
+        throw RepositoryError.unavailable
     }
 }
 
@@ -725,13 +1184,8 @@ struct UnavailableAlertsRepository: AlertsRepository {
 }
 
 struct UnavailableProfileRepository: ProfileRepository {
-    func fetchProfile() async -> UserProfile {
-        UserProfile(
-            name: "API 미구현(로그인 사용자)",
-            subtitle: "User(로그인) API 미구현",
-            headline: "로그인/사용자 정보 API가 아직 제공되지 않았습니다.",
-            location: "API 미구현(사용자 위치)"
-        )
+    func fetchProfile() async throws -> UserProfile {
+        throw RepositoryError.unavailable
     }
 }
 
@@ -783,9 +1237,11 @@ private enum MockFixture {
             name: "역삼도서관",
             address: "서울특별시 강남구 역삼동 123-45",
             phone: "02-1111-1111",
+            latitude: 37.4995,
+            longitude: 127.0311,
             hours: [
-                OperatingHour(day: "평일", hoursText: "09:00 - 20:00", isClosed: false),
-                OperatingHour(day: "토요일", hoursText: "09:00 - 20:00", isClosed: false),
+                OperatingHour(day: "평일", hoursText: "오전 9시 ~ 오후 8시", isClosed: false),
+                OperatingHour(day: "토요일", hoursText: "오전 9시 ~ 오후 8시", isClosed: false),
                 OperatingHour(day: "일요일", hoursText: "휴관", isClosed: true)
             ],
             regularHolidays: [
@@ -803,9 +1259,11 @@ private enum MockFixture {
             name: "구미시립중앙도서관",
             address: "경상북도 구미시 대학로 61",
             phone: "054-480-4660",
+            latitude: 36.1450,
+            longitude: 128.3937,
             hours: [
-                OperatingHour(day: "평일", hoursText: "09:00 - 21:00", isClosed: false),
-                OperatingHour(day: "토요일", hoursText: "09:00 - 18:00", isClosed: false),
+                OperatingHour(day: "평일", hoursText: "오전 9시 ~ 오후 9시", isClosed: false),
+                OperatingHour(day: "토요일", hoursText: "오전 9시 ~ 오후 6시", isClosed: false),
                 OperatingHour(day: "일요일", hoursText: "휴관", isClosed: true)
             ],
             regularHolidays: [
@@ -827,14 +1285,17 @@ private enum MockFixture {
         publisher: "개발출판사",
         year: "2024",
         coverImageURL: nil,
-        summary: "면접 준비생과 취업 준비생을 위한 실전 면접 가이드. 실제 면접 사례와 합격 노하우를 담아 인성 면접부터 실무 면접까지 한 권으로 정리한 목업 설명입니다."
+        summary: "면접 준비생과 취업 준비생을 위한 실전 면접 가이드. 실제 면접 사례와 합격 노하우를 담아 인성 면접부터 실무 면접까지 한 권으로 정리한 목업 설명입니다.",
+        isFavorite: true
     )
 
     static let profile = UserProfile(
-        name: "손유나",
-        subtitle: "Polaris Demo",
-        headline: "차분한 탐색 경험과 빠른 정보 접근을 위한 목업 프로필",
-        location: "서울 강남구"
+        id: "42",
+        provider: "KAKAO",
+        role: "USER",
+        nickname: "손유나",
+        email: "demo@polaris.local",
+        profileImageURL: nil
     )
 }
 
@@ -861,7 +1322,8 @@ struct MockBookRepository: BookRepository {
             publisher: "개발출판사",
             year: "2024",
             coverImageURL: nil,
-            summary: MockFixture.bookDetail.summary
+            summary: MockFixture.bookDetail.summary,
+            isFavorite: false
         )
     }
 }
@@ -918,12 +1380,18 @@ struct MockLibraryRepository: LibraryRepository {
 }
 
 struct MockFavoritesRepository: FavoritesRepository {
-    func fetchFavoriteBooks() async -> [BookSummary] {
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
         MockFixture.books.prefix(2).map { $0 }
     }
 
-    func fetchFavoriteLibraries() async -> [LibrarySummary] {
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
         Array(MockFixture.libraries.prefix(2))
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
     }
 }
 
@@ -934,7 +1402,7 @@ struct MockAlertsRepository: AlertsRepository {
 }
 
 struct MockProfileRepository: ProfileRepository {
-    func fetchProfile() async -> UserProfile {
+    func fetchProfile() async throws -> UserProfile {
         MockFixture.profile
     }
 }

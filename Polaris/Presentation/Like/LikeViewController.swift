@@ -63,6 +63,7 @@ final class LikeViewController: BaseViewController, UICollectionViewDelegate {
     }
 
     private func render(_ state: LikeViewModel.State) {
+        contentView.setErrorMessage(state.errorMessage)
         contentView.segmentControl.updateTitles([
             "도서 (\(state.books.count))",
             "도서관 (\(state.libraries.count))"
@@ -74,12 +75,18 @@ final class LikeViewController: BaseViewController, UICollectionViewDelegate {
         case .books:
             items = state.books.map(LikeItem.book)
             contentView.collectionView.backgroundView = state.books.isEmpty
-                ? EmptyStateView(title: "찜 API 미구현", message: "도서 찜 API가 아직 제공되지 않았습니다.")
+                ? EmptyStateView(
+                    title: state.errorMessage ?? "찜한 도서가 없어요",
+                    message: state.errorMessage == nil ? "관심 있는 도서를 찜하면 여기에 모아볼 수 있어요." : "잠시 후 다시 시도해 주세요."
+                )
                 : nil
         case .libraries:
             items = state.libraries.map(LikeItem.library)
             contentView.collectionView.backgroundView = state.libraries.isEmpty
-                ? EmptyStateView(title: "찜 API 미구현", message: "도서관 찜 API가 아직 제공되지 않았습니다.")
+                ? EmptyStateView(
+                    title: state.errorMessage ?? "찜한 도서관이 없어요",
+                    message: state.errorMessage == nil ? "자주 찾는 도서관을 찜하면 여기에 모아볼 수 있어요." : "잠시 후 다시 시도해 주세요."
+                )
                 : nil
         }
 
@@ -92,18 +99,21 @@ final class LikeViewController: BaseViewController, UICollectionViewDelegate {
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Int, LikeItem> {
         let favoriteRegistration = UICollectionView.CellRegistration<FavoriteBookCell, FavoriteBookItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
-            cell.onBellTap = { [weak self] in
-                self?.viewModel.didToggleBookAlert(id: item.id)
+            cell.onDetailTap = { [weak self] in
+                self?.viewModel.didTapBookDetail(id: item.id)
             }
             cell.onHeartTap = { [weak self] in
-                self?.viewModel.didToggleBookFavorite(id: item.id)
+                Task { await self?.viewModel.didToggleBookFavorite(id: item.id) }
             }
         }
 
         let libraryRegistration = UICollectionView.CellRegistration<LibraryCardCell, LibraryCardItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
+            cell.onBellTap = {
+                // Alerts API is not available yet.
+            }
             cell.onHeartTap = { [weak self] in
-                self?.viewModel.didToggleLibraryFavorite(id: item.id)
+                Task { await self?.viewModel.didToggleLibraryFavorite(id: item.id) }
             }
         }
 
@@ -132,6 +142,11 @@ private final class LikeView: UIView {
     let headerView = NavigationHeaderView(title: "찜", showsDivider: false)
     let segmentControl = UnderlineSegmentControlView(titles: ["도서 (0)", "도서관 (0)"])
     let dividerView = UIView()
+    private let errorBannerView = UIView()
+    private let errorBannerLabel = UILabel()
+    private var errorBannerHeightConstraint: NSLayoutConstraint!
+    private var errorBannerLabelTopConstraint: NSLayoutConstraint!
+    private var errorBannerLabelBottomConstraint: NSLayoutConstraint!
     let collectionView: UICollectionView
 
     override init(frame: CGRect) {
@@ -140,10 +155,21 @@ private final class LikeView: UIView {
 
         backgroundColor = AppColor.background
         dividerView.backgroundColor = AppColor.line
+        errorBannerView.backgroundColor = AppColor.dangerSurface
+        errorBannerView.layer.cornerRadius = AppRadius.small
+        errorBannerView.layer.cornerCurve = .continuous
+        errorBannerView.isHidden = true
+        errorBannerLabel.font = AppTypography.caption
+        errorBannerLabel.textColor = AppColor.danger
+        errorBannerLabel.numberOfLines = 2
         collectionView.backgroundColor = .clear
 
-        addSubviews(headerView, segmentControl, dividerView, collectionView)
-        [headerView, segmentControl, dividerView, collectionView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        errorBannerView.addSubview(errorBannerLabel)
+        addSubviews(headerView, segmentControl, dividerView, errorBannerView, collectionView)
+        [headerView, segmentControl, dividerView, errorBannerView, errorBannerLabel, collectionView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        errorBannerHeightConstraint = errorBannerView.heightAnchor.constraint(equalToConstant: 0)
+        errorBannerLabelTopConstraint = errorBannerLabel.topAnchor.constraint(equalTo: errorBannerView.topAnchor)
+        errorBannerLabelBottomConstraint = errorBannerLabel.bottomAnchor.constraint(equalTo: errorBannerView.bottomAnchor)
 
         NSLayoutConstraint.activate([
             headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
@@ -160,7 +186,17 @@ private final class LikeView: UIView {
             dividerView.trailingAnchor.constraint(equalTo: segmentControl.trailingAnchor),
             dividerView.heightAnchor.constraint(equalToConstant: 1),
 
-            collectionView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: AppSpacing.m),
+            errorBannerView.topAnchor.constraint(equalTo: dividerView.bottomAnchor, constant: AppSpacing.m),
+            errorBannerView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
+            errorBannerView.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+            errorBannerHeightConstraint,
+
+            errorBannerLabelTopConstraint,
+            errorBannerLabel.leadingAnchor.constraint(equalTo: errorBannerView.leadingAnchor, constant: AppSpacing.m),
+            errorBannerLabel.trailingAnchor.constraint(equalTo: errorBannerView.trailingAnchor, constant: -AppSpacing.m),
+            errorBannerLabelBottomConstraint,
+
+            collectionView.topAnchor.constraint(equalTo: errorBannerView.bottomAnchor, constant: AppSpacing.m),
             collectionView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
@@ -171,6 +207,15 @@ private final class LikeView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func setErrorMessage(_ message: String?) {
+        errorBannerLabel.text = message
+        errorBannerView.isHidden = message == nil
+        errorBannerLabel.isHidden = message == nil
+        errorBannerHeightConstraint.constant = message == nil ? 0 : 44
+        errorBannerLabelTopConstraint.constant = message == nil ? 0 : AppSpacing.s
+        errorBannerLabelBottomConstraint.constant = message == nil ? 0 : -AppSpacing.s
     }
 
     private static func makeLayout() -> UICollectionViewLayout {

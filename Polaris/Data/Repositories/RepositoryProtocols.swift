@@ -22,8 +22,10 @@ protocol LibraryRepository {
 }
 
 protocol FavoritesRepository {
-    func fetchFavoriteBooks() async -> [BookSummary]
-    func fetchFavoriteLibraries() async -> [LibrarySummary]
+    func fetchFavoriteBooks() async throws -> [BookSummary]
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary]
+    func setBookFavorite(id: String, isFavorite: Bool) async throws
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws
 }
 
 protocol AlertsRepository {
@@ -31,5 +33,20 @@ protocol AlertsRepository {
 }
 
 protocol ProfileRepository {
-    func fetchProfile() async -> UserProfile
+    func fetchProfile() async throws -> UserProfile
+}
+
+enum RepositoryError: Error, Equatable {
+    case unauthenticated
+    case unavailable
+}
+
+protocol AuthRepository {
+    func currentSession() async -> AuthSession?
+    func restoreSession() async -> AuthSession?
+    func makeKakaoLoginRequest() async throws -> AuthLoginRequest
+    func exchange(code: String, targetID: String, codeVerifier: String) async throws -> AuthSession
+    func refresh() async throws -> AuthSession
+    func logout() async throws
+    func clearLocalSession() async
 }

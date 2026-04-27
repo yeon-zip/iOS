@@ -41,7 +41,7 @@ final class ProfileViewController: BaseViewController {
         }, for: .touchUpInside)
 
         viewModel.onStateChange = { [weak self] state in
-            self?.render(state)
+            self?.contentView.render(state)
         }
 
         viewModel.onRoute = { [weak self] route in
@@ -49,105 +49,84 @@ final class ProfileViewController: BaseViewController {
             navigator.handle(route, from: self)
         }
     }
-
-    private func render(_ state: ProfileViewModel.State) {
-        guard let profile = state.profile else { return }
-        contentView.nameLabel.text = profile.name
-        contentView.subtitleLabel.text = profile.subtitle
-        contentView.locationLabel.text = profile.location
-        contentView.headlineLabel.text = profile.headline
-    }
 }
 
 private final class ProfileView: UIView {
     let headerView = NavigationHeaderView(title: "프로필", showsDivider: false)
-    let nameLabel = UILabel()
-    let subtitleLabel = UILabel()
-    let locationLabel = UILabel()
-    let headlineLabel = UILabel()
+    private let scrollView = UIScrollView()
+    private let contentStack = UIStackView()
+    private let profileCard = CardContainerView()
+    private let avatarView = ProfileAvatarView()
+    private let nameLabel = UILabel()
+    private let emailLabel = UILabel()
+    private let errorLabel = UILabel()
+    private let loadingOverlayView = LoadingOverlayView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = AppColor.background
 
-        let profileCard = CardContainerView()
-        let avatarView = UIView()
-        let avatarIconView = UIImageView(image: UIImage(systemName: "person.crop.circle.fill"))
-        let infoStack = UIStackView()
-        let comingSoonCard = CardContainerView()
-        let comingSoonLabel = UILabel()
+        contentStack.axis = .vertical
+        contentStack.spacing = AppSpacing.l
 
-        avatarView.backgroundColor = AppColor.accentSurface
-        avatarView.layer.cornerRadius = 38
-        avatarView.layer.cornerCurve = .continuous
-        avatarIconView.tintColor = AppColor.accent
-        avatarIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 34, weight: .regular)
-
-        nameLabel.font = AppTypography.hero
+        nameLabel.font = AppTypography.title
         nameLabel.textColor = AppColor.textPrimary
-        subtitleLabel.font = AppTypography.body
-        subtitleLabel.textColor = AppColor.textSecondary
-        locationLabel.font = AppTypography.caption
-        locationLabel.textColor = AppColor.textTertiary
-        headlineLabel.font = AppTypography.body
-        headlineLabel.textColor = AppColor.textPrimary
-        headlineLabel.numberOfLines = 0
+        nameLabel.numberOfLines = 2
 
-        infoStack.axis = .vertical
-        infoStack.spacing = AppSpacing.xs
-        infoStack.addArrangedSubview(nameLabel)
-        infoStack.addArrangedSubview(subtitleLabel)
-        infoStack.addArrangedSubview(locationLabel)
+        emailLabel.font = AppTypography.body
+        emailLabel.textColor = AppColor.textSecondary
+        emailLabel.numberOfLines = 2
 
-        comingSoonLabel.text = "User(로그인) API가 아직 제공되지 않아 프로필 상세 설정과 활동 로그를 불러올 수 없습니다."
-        comingSoonLabel.font = AppTypography.body
-        comingSoonLabel.textColor = AppColor.textSecondary
-        comingSoonLabel.numberOfLines = 0
+        errorLabel.font = AppTypography.body
+        errorLabel.textColor = AppColor.textSecondary
+        errorLabel.textAlignment = .center
+        errorLabel.numberOfLines = 0
+        errorLabel.isHidden = true
 
-        addSubviews(headerView, profileCard, comingSoonCard)
-        [headerView, profileCard, comingSoonCard].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        let headerStack = UIStackView(arrangedSubviews: [avatarView, nameStack])
+        headerStack.axis = .horizontal
+        headerStack.spacing = AppSpacing.xl
+        headerStack.alignment = .center
 
-        profileCard.addSubviews(avatarView, infoStack, headlineLabel)
-        avatarView.addSubview(avatarIconView)
-        [avatarView, avatarIconView, infoStack, headlineLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        profileCard.addSubview(headerStack)
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        profileCard.isHidden = true
 
-        comingSoonCard.addSubview(comingSoonLabel)
-        comingSoonLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.addArrangedSubview(profileCard)
+        contentStack.addArrangedSubview(errorLabel)
+
+        addSubviews(headerView, scrollView, loadingOverlayView)
+        scrollView.addSubview(contentStack)
+        [headerView, scrollView, contentStack, loadingOverlayView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         NSLayoutConstraint.activate([
             headerView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: AppSpacing.s),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AppSpacing.xxl),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AppSpacing.xxl),
 
-            profileCard.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xl),
-            profileCard.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
-            profileCard.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: AppSpacing.xl),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            avatarView.topAnchor.constraint(equalTo: profileCard.topAnchor, constant: AppSpacing.l),
-            avatarView.leadingAnchor.constraint(equalTo: profileCard.leadingAnchor, constant: AppSpacing.l),
-            avatarView.widthAnchor.constraint(equalToConstant: 76),
-            avatarView.heightAnchor.constraint(equalToConstant: 76),
+            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: AppSpacing.xxl),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -AppSpacing.xxl),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -AppSpacing.xxxl),
+            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -(AppSpacing.xxl * 2)),
 
-            avatarIconView.centerXAnchor.constraint(equalTo: avatarView.centerXAnchor),
-            avatarIconView.centerYAnchor.constraint(equalTo: avatarView.centerYAnchor),
+            headerStack.topAnchor.constraint(equalTo: profileCard.topAnchor, constant: AppSpacing.xxl),
+            headerStack.leadingAnchor.constraint(equalTo: profileCard.leadingAnchor, constant: AppSpacing.xxl),
+            headerStack.trailingAnchor.constraint(equalTo: profileCard.trailingAnchor, constant: -AppSpacing.xxl),
+            headerStack.bottomAnchor.constraint(equalTo: profileCard.bottomAnchor, constant: -AppSpacing.xxl),
 
-            infoStack.topAnchor.constraint(equalTo: avatarView.topAnchor, constant: AppSpacing.xs),
-            infoStack.leadingAnchor.constraint(equalTo: avatarView.trailingAnchor, constant: AppSpacing.l),
-            infoStack.trailingAnchor.constraint(equalTo: profileCard.trailingAnchor, constant: -AppSpacing.l),
+            avatarView.widthAnchor.constraint(equalToConstant: 72),
+            avatarView.heightAnchor.constraint(equalToConstant: 72),
 
-            headlineLabel.topAnchor.constraint(equalTo: avatarView.bottomAnchor, constant: AppSpacing.l),
-            headlineLabel.leadingAnchor.constraint(equalTo: avatarView.leadingAnchor),
-            headlineLabel.trailingAnchor.constraint(equalTo: profileCard.trailingAnchor, constant: -AppSpacing.l),
-            headlineLabel.bottomAnchor.constraint(equalTo: profileCard.bottomAnchor, constant: -AppSpacing.l),
-
-            comingSoonCard.topAnchor.constraint(equalTo: profileCard.bottomAnchor, constant: AppSpacing.l),
-            comingSoonCard.leadingAnchor.constraint(equalTo: profileCard.leadingAnchor),
-            comingSoonCard.trailingAnchor.constraint(equalTo: profileCard.trailingAnchor),
-
-            comingSoonLabel.topAnchor.constraint(equalTo: comingSoonCard.topAnchor, constant: AppSpacing.l),
-            comingSoonLabel.leadingAnchor.constraint(equalTo: comingSoonCard.leadingAnchor, constant: AppSpacing.l),
-            comingSoonLabel.trailingAnchor.constraint(equalTo: comingSoonCard.trailingAnchor, constant: -AppSpacing.l),
-            comingSoonLabel.bottomAnchor.constraint(equalTo: comingSoonCard.bottomAnchor, constant: -AppSpacing.l)
+            loadingOverlayView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            loadingOverlayView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            loadingOverlayView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            loadingOverlayView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
 
         accessibilityIdentifier = "profileScreen"
@@ -155,6 +134,98 @@ private final class ProfileView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func render(_ state: ProfileViewModel.State) {
+        loadingOverlayView.setLoading(state.isLoading)
+
+        if let profile = state.profile {
+            profileCard.isHidden = false
+            avatarView.configure(profile: profile)
+            nameLabel.text = profile.nickname
+            emailLabel.text = profile.email
+        } else {
+            profileCard.isHidden = true
+        }
+
+        errorLabel.text = state.errorMessage
+        errorLabel.isHidden = state.errorMessage == nil
+    }
+
+    private var nameStack: UIStackView {
+        let stackView = UIStackView(arrangedSubviews: [nameLabel, emailLabel])
+        stackView.axis = .vertical
+        stackView.spacing = AppSpacing.xs
+        return stackView
+    }
+}
+
+private final class ProfileAvatarView: UIView {
+    private static let imageCache = NSCache<NSURL, UIImage>()
+
+    private let imageView = UIImageView()
+    private let initialLabel = UILabel()
+    private var imageTask: Task<Void, Never>?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = AppColor.accentSurface
+        layer.cornerRadius = 36
+        layer.cornerCurve = .continuous
+        clipsToBounds = true
+
+        imageView.contentMode = .scaleAspectFill
+        imageView.isHidden = true
+
+        initialLabel.font = AppTypography.title
+        initialLabel.textColor = AppColor.accent
+        initialLabel.textAlignment = .center
+
+        addSubviews(imageView, initialLabel)
+        [imageView, initialLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        imageView.pinEdges(to: self)
+        initialLabel.pinEdges(to: self)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        imageTask?.cancel()
+    }
+
+    func configure(profile: UserProfile) {
+        imageTask?.cancel()
+        imageView.image = nil
+        imageView.isHidden = true
+        initialLabel.isHidden = false
+        initialLabel.text = profile.nickname.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "북"
+
+        guard let imageURL = profile.profileImageURL else { return }
+        if let cachedImage = Self.imageCache.object(forKey: imageURL as NSURL) {
+            applyLoadedImage(cachedImage)
+            return
+        }
+
+        imageTask = Task { [weak self] in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: imageURL)
+                guard Task.isCancelled == false, let image = UIImage(data: data) else { return }
+                Self.imageCache.setObject(image, forKey: imageURL as NSURL)
+                await MainActor.run {
+                    self?.applyLoadedImage(image)
+                }
+            } catch {
+                // Initial fallback remains visible if the profile image cannot be loaded.
+            }
+        }
+    }
+
+    private func applyLoadedImage(_ image: UIImage) {
+        imageView.image = image
+        imageView.isHidden = false
+        initialLabel.isHidden = true
     }
 }
 

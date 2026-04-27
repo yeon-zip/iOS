@@ -34,17 +34,20 @@ struct AppDependencies {
     let favoritesRepository: any FavoritesRepository
     let alertsRepository: any AlertsRepository
     let profileRepository: any ProfileRepository
+    let authRepository: any AuthRepository
     let locationAddressService: any LocationAddressService
 
     static let live: AppDependencies = {
         let apiClient = PolarisAPIClient()
+        let authRepository = LiveAuthRepository()
         return AppDependencies(
             searchRepository: LiveSearchRepository(apiClient: apiClient),
             bookRepository: LiveBookRepository(apiClient: apiClient),
             libraryRepository: LiveLibraryRepository(apiClient: apiClient),
-            favoritesRepository: UnavailableFavoritesRepository(),
+            favoritesRepository: LiveFavoritesRepository(apiClient: apiClient, authRepository: authRepository),
             alertsRepository: UnavailableAlertsRepository(),
-            profileRepository: UnavailableProfileRepository(),
+            profileRepository: LiveProfileRepository(apiClient: apiClient, authRepository: authRepository),
+            authRepository: authRepository,
             locationAddressService: AppleLocationAddressService()
         )
     }()
@@ -56,6 +59,7 @@ struct AppDependencies {
         favoritesRepository: MockFavoritesRepository(),
         alertsRepository: MockAlertsRepository(),
         profileRepository: MockProfileRepository(),
+        authRepository: MockAuthRepository(),
         locationAddressService: AppleLocationAddressService()
     )
 

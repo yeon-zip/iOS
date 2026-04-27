@@ -24,6 +24,7 @@ final class SearchResultsViewModel {
 
     private let searchRepository: any SearchRepository
     private let libraryRepository: any LibraryRepository
+    private let favoritesRepository: any FavoritesRepository
     private var currentLocation: AddressSuggestion
     private(set) var state: State
     private var refreshTask: Task<Void, Never>?
@@ -32,12 +33,14 @@ final class SearchResultsViewModel {
     init(
         searchRepository: any SearchRepository,
         libraryRepository: any LibraryRepository,
+        favoritesRepository: any FavoritesRepository = UnavailableFavoritesRepository(),
         currentLocation: AddressSuggestion,
         currentDistance: DistanceOption,
         initialQuery: String? = nil
     ) {
         self.searchRepository = searchRepository
         self.libraryRepository = libraryRepository
+        self.favoritesRepository = favoritesRepository
         self.currentLocation = currentLocation
         self.state = State(selectedDistance: currentDistance)
         self.state.query.text = initialQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -116,8 +119,21 @@ final class SearchResultsViewModel {
         onRoute?(.libraryDetail(id: id))
     }
 
-    func didToggleLibraryFavorite(id: String) {
-        // Favorites API is not available yet.
+    func didToggleLibraryFavorite(id: String) async {
+        guard let index = state.libraries.firstIndex(where: { $0.id == id }) else { return }
+        let item = state.libraries[index]
+        let previousLibraries = state.libraries
+        let nextFavoriteState = item.isFavorite == false
+
+        state.libraries[index] = item.withFavoriteState(nextFavoriteState)
+        onStateChange?(state)
+
+        do {
+            try await favoritesRepository.setLibraryFavorite(id: id, isFavorite: nextFavoriteState)
+        } catch {
+            state.libraries = previousLibraries
+            onStateChange?(state)
+        }
     }
 
     func didToggleLibraryAlert(id: String) {
@@ -200,8 +216,9 @@ final class SearchResultsViewModel {
             query: request.query,
             selectedBookID: effectiveSelectedBookID
         )
+        let favoriteLibraryIDs = await loadFavoriteLibraryIDs()
         guard Task.isCancelled == false, generation == refreshGeneration else { return }
-        applyLibraries(fetchedLibraries)
+        applyLibraries(fetchedLibraries, favoriteLibraryIDs: favoriteLibraryIDs)
     }
 
     private func refreshLibraries(request: SearchResultsRequest, generation: Int) async {
@@ -211,11 +228,12 @@ final class SearchResultsViewModel {
             query: request.query,
             selectedBookID: request.selectedBookID
         )
+        let favoriteLibraryIDs = await loadFavoriteLibraryIDs()
         guard Task.isCancelled == false, generation == refreshGeneration else { return }
-        applyLibraries(fetchedLibraries)
+        applyLibraries(fetchedLibraries, favoriteLibraryIDs: favoriteLibraryIDs)
     }
 
-    private func applyLibraries(_ fetchedLibraries: [LibrarySummary]) {
+    private func applyLibraries(_ fetchedLibraries: [LibrarySummary], favoriteLibraryIDs: Set<String>) {
         state.libraries = fetchedLibraries.map { library in
             var badges = [makeOperatingBadge(library.operatingStatus)]
             if let loanStatus = library.loanStatus {
@@ -226,14 +244,22 @@ final class SearchResultsViewModel {
                 title: library.name,
                 distanceText: library.distanceText,
                 badges: badges,
-                showsBell: false,
-                showsFavorite: false,
+                showsBell: true,
+                showsFavorite: true,
                 isBellActive: library.isAlertEnabled,
-                isFavorite: library.isFavorite
+                isFavorite: favoriteLibraryIDs.contains(library.id) || library.isFavorite
             )
         }
         state.isLibrariesLoading = false
         onStateChange?(state)
+    }
+
+    private func loadFavoriteLibraryIDs() async -> Set<String> {
+        do {
+            return Set(try await favoritesRepository.fetchFavoriteLibraries().map(\.id))
+        } catch {
+            return []
+        }
     }
 }
 
@@ -241,4 +267,19 @@ private struct SearchResultsRequest: Equatable {
     let selectedDistance: DistanceOption
     let query: SearchQuery
     let selectedBookID: String?
+}
+
+private extension LibraryCardItemViewData {
+    func withFavoriteState(_ isFavorite: Bool) -> LibraryCardItemViewData {
+        LibraryCardItemViewData(
+            id: id,
+            title: title,
+            distanceText: distanceText,
+            badges: badges,
+            showsBell: showsBell,
+            showsFavorite: showsFavorite,
+            isBellActive: isBellActive,
+            isFavorite: isFavorite
+        )
+    }
 }
