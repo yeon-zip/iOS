@@ -15,6 +15,7 @@ protocol LocationSelectionHandling: AnyObject {
 final class AppNavigator {
     private let navigationController: UINavigationController
     private let dependencies: AppDependencies
+    private var startupTask: Task<Void, Never>?
 
     init(navigationController: UINavigationController, dependencies: AppDependencies) {
         self.navigationController = navigationController
@@ -23,11 +24,20 @@ final class AppNavigator {
 
     func start() {
         navigationController.setNavigationBarHidden(true, animated: false)
-        navigationController.viewControllers = [makeHome()]
+        startupTask?.cancel()
+
+        let startupController = makeStartup()
+        navigationController.viewControllers = [startupController]
+
+        startupTask = Task { [weak self, weak startupController] in
+            await self?.showInitialScreen(replacing: startupController)
+        }
     }
 
     func handle(_ route: AppRoute, from source: UIViewController) {
         switch route {
+        case .home:
+            showHome(animated: true)
         case let .search(currentLocation, currentDistance, initialQuery):
             navigationController.pushViewController(
                 makeSearch(
@@ -37,12 +47,24 @@ final class AppNavigator {
                 ),
                 animated: true
             )
+        case let .bookSearch(query):
+            navigationController.pushViewController(
+                makeSearch(
+                    currentLocation: defaultSearchLocation,
+                    currentDistance: .twoKm,
+                    initialQuery: query
+                ),
+                animated: true
+            )
         case .likes:
             navigationController.pushViewController(makeLikes(), animated: true)
         case .alerts:
             navigationController.pushViewController(makeAlerts(), animated: true)
         case .profile:
             navigationController.pushViewController(makeProfile(), animated: true)
+        case .login:
+            guard !(navigationController.topViewController is LoginViewController) else { return }
+            showLogin(animated: true)
         case let .locationPicker(currentLocation):
             guard let locationHandler = source as? LocationSelectionHandling else { return }
             let controller = makeLocationPicker(currentLocation: currentLocation) { [weak locationHandler] address in
@@ -71,11 +93,47 @@ final class AppNavigator {
         }
     }
 
+    private func showInitialScreen(replacing startupController: UIViewController?) async {
+        let restoredSession = await dependencies.authRepository.restoreSession()
+
+        guard Task.isCancelled == false,
+              let startupController,
+              navigationController.viewControllers.first === startupController else {
+            return
+        }
+
+        startupTask = nil
+
+        if restoredSession != nil {
+            showHome(animated: false)
+        } else {
+            showLogin(animated: false)
+        }
+    }
+
+    private func showHome(animated: Bool) {
+        navigationController.setViewControllers([makeHome()], animated: animated)
+    }
+
+    private func showLogin(animated: Bool) {
+        navigationController.setViewControllers([makeLogin()], animated: animated)
+    }
+
+    private func makeStartup() -> UIViewController {
+        let controller = UIViewController()
+        controller.view.backgroundColor = AppColor.background
+        return controller
+    }
+
     private func makeHome() -> HomeViewController {
-        let homeViewModel = HomeViewModel(libraryRepository: dependencies.libraryRepository)
+        let homeViewModel = HomeViewModel(
+            libraryRepository: dependencies.libraryRepository,
+            favoritesRepository: dependencies.favoritesRepository
+        )
         let searchViewModel = SearchResultsViewModel(
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
+            favoritesRepository: dependencies.favoritesRepository,
             currentLocation: homeViewModel.state.selectedLocation,
             currentDistance: homeViewModel.state.selectedDistance
         )
@@ -101,6 +159,7 @@ final class AppNavigator {
         let viewModel = SearchResultsViewModel(
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
+            favoritesRepository: dependencies.favoritesRepository,
             currentLocation: currentLocation,
             currentDistance: currentDistance,
             initialQuery: initialQuery
@@ -124,12 +183,31 @@ final class AppNavigator {
     }
 
     private func makeBookDetail(id: String) -> BookDetailViewController {
-        let viewModel = BookDetailViewModel(bookID: id, bookRepository: dependencies.bookRepository)
+        let viewModel = BookDetailViewModel(
+            bookID: id,
+            bookRepository: dependencies.bookRepository,
+            favoritesRepository: dependencies.favoritesRepository
+        )
         return BookDetailViewController(viewModel: viewModel)
     }
 
     private func makeProfile() -> ProfileViewController {
         let viewModel = ProfileViewModel(profileRepository: dependencies.profileRepository)
         return ProfileViewController(viewModel: viewModel, navigator: self)
+    }
+
+    private func makeLogin() -> LoginViewController {
+        let viewModel = LoginViewModel(authRepository: dependencies.authRepository)
+        return LoginViewController(viewModel: viewModel, navigator: self)
+    }
+
+    private var defaultSearchLocation: AddressSuggestion {
+        AddressSuggestion(
+            id: "home-default-location",
+            roadAddress: "경상북도 구미시 대학로 61",
+            detailText: "기본 위치",
+            latitude: 36.1450,
+            longitude: 128.3937
+        )
     }
 }

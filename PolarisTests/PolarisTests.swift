@@ -136,8 +136,89 @@ private func makeTestLibrary(id: String, name: String) -> LibrarySummary {
     )
 }
 
+private struct FixedFavoritesRepository: FavoritesRepository {
+    let books: [BookSummary]
+    let libraries: [LibrarySummary]
+    let mutationResult: Bool
+
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
+        books
+    }
+
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
+        libraries
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+        if mutationResult == false {
+            throw RepositoryError.unavailable
+        }
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
+        if mutationResult == false {
+            throw RepositoryError.unavailable
+        }
+    }
+}
+
+private struct FailingFavoritesRepository: FavoritesRepository {
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
+        throw RepositoryError.unavailable
+    }
+
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
+        throw RepositoryError.unavailable
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+        throw RepositoryError.unavailable
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
+        throw RepositoryError.unavailable
+    }
+}
+
+private final class RequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    var firstRequest: URLRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.first
+    }
+
+    var paths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap { $0.url?.path }
+    }
+
+    var methods: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap(\.httpMethod)
+    }
+
+    func record(_ request: URLRequest) {
+        lock.lock()
+        defer { lock.unlock() }
+        requests.append(request)
+    }
+}
+
 @MainActor
 struct PolarisTests {
+    private static func authSession() -> AuthSession {
+        AuthSession(
+            accessToken: "access-token",
+            refreshToken: "refresh-token",
+            expiresAt: Date().addingTimeInterval(600),
+            userId: 42
+        )
+    }
 
     @Test func homeViewModelAppliesDistanceAndClosedFilter() async throws {
         let viewModel = HomeViewModel(libraryRepository: MockLibraryRepository())
@@ -435,6 +516,64 @@ struct PolarisTests {
         #expect(libraries.first?.loanStatus == .available)
     }
 
+    @Test func liveLibraryRepositoryUsesFiveKmLimitTwentyForBookAvailabilityQueries() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let responseJSON = """
+        {
+          "hasNext": false,
+          "nextCursor": null,
+          "items": []
+        }
+        """
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(responseJSON.utf8))
+        }
+        let repository = LiveLibraryRepository(apiClient: PolarisAPIClient(session: session))
+
+        _ = await repository.fetchNearbyLibraries(
+            origin: AddressSuggestion(
+                id: "yongin-seocheon",
+                roadAddress: "경기도 용인시 기흥구 서천동로21번길 21",
+                detailText: "서천마을 중앙상가",
+                latitude: 37.2410,
+                longitude: 127.0724
+            ),
+            distance: .fiveKm,
+            query: SearchQuery(text: "아몬드", excludeUnavailable: false),
+            selectedBookID: "9791198363510"
+        )
+
+        let capturedURL = requestRecorder.firstRequest?.url
+        #expect(capturedURL != nil)
+        guard let capturedURL,
+              let components = URLComponents(url: capturedURL, resolvingAgainstBaseURL: false) else { return }
+
+        let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { item in
+            (item.name, item.value ?? "")
+        })
+
+        #expect(components.path.hasSuffix("/book-availability"))
+        #expect(queryItems["isbn"] == "9791198363510")
+        #expect(queryItems["latitude"] == "37.241")
+        #expect(queryItems["longitude"] == "127.0724")
+        #expect(queryItems["radiusKm"] == "5")
+        #expect(queryItems["limit"] == "20")
+        #expect(queryItems["loanAvailable"] == nil)
+    }
+
     @Test func liveAPISmokeTestsSuwonAndDaeguCoordinates() async throws {
         guard ProcessInfo.processInfo.environment["POLARIS_RUN_LIVE_API_SMOKE_TESTS"] == "1" else { return }
 
@@ -492,6 +631,195 @@ struct PolarisTests {
         viewModel.didSelectTab(index: FavoriteTab.libraries.rawValue)
         #expect(viewModel.state.selectedTab == .libraries)
         #expect(viewModel.state.libraries.first?.title == "강남 도서관")
+    }
+
+    @Test func likeViewModelRoutesBookTapToSearchAndDetailButtonToBookDetail() async throws {
+        let viewModel = LikeViewModel(favoritesRepository: MockFavoritesRepository())
+        var routedRoutes: [AppRoute] = []
+        viewModel.onRoute = { routedRoutes.append($0) }
+
+        await viewModel.load()
+        guard let firstBook = viewModel.state.books.first else {
+            Issue.record("Expected mock favorite books.")
+            return
+        }
+
+        viewModel.didSelectBook(id: firstBook.id)
+        viewModel.didTapBookDetail(id: firstBook.id)
+
+        #expect(routedRoutes == [
+            .bookSearch(query: firstBook.title),
+            .bookDetail(id: firstBook.id)
+        ])
+    }
+
+    @Test func likeViewModelRollsBackWhenBookFavoriteMutationFails() async throws {
+        let book = BookSummary(
+            id: "9791198363510",
+            title: "아몬드",
+            author: "손원평",
+            publisher: "",
+            year: "",
+            coverImageURL: nil,
+            isFavorite: true,
+            isAlertEnabled: false,
+            loanStatus: nil
+        )
+        let viewModel = LikeViewModel(
+            favoritesRepository: FixedFavoritesRepository(
+                books: [book],
+                libraries: [],
+                mutationResult: false
+            )
+        )
+
+        await viewModel.load()
+        await viewModel.didToggleBookFavorite(id: "9791198363510")
+
+        #expect(viewModel.state.books.count == 1)
+        #expect(viewModel.state.books.first?.isFavorite == true)
+        #expect(viewModel.state.errorMessage == "도서 찜 상태를 변경하지 못했습니다.")
+    }
+
+    @Test func likeViewModelShowsErrorWhenFavoriteListFetchFails() async throws {
+        let viewModel = LikeViewModel(favoritesRepository: FailingFavoritesRepository())
+
+        await viewModel.load()
+
+        #expect(viewModel.state.books.isEmpty)
+        #expect(viewModel.state.libraries.isEmpty)
+        #expect(viewModel.state.errorMessage == "찜 목록을 불러오지 못했습니다.")
+    }
+
+    @Test func liveProfileRepositoryDecodesCurrentUserWithBearerToken() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let responseJSON = """
+        {
+          "id": 42,
+          "provider": "KAKAO",
+          "role": "USER",
+          "nickname": "북극성",
+          "email": "user@example.com",
+          "profileImageUrl": "https://example.com/profile.png"
+        }
+        """
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(responseJSON.utf8))
+        }
+        let authRepository = MockAuthRepository(session: Self.authSession())
+        let repository = LiveProfileRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: authRepository
+        )
+
+        let profile = try await repository.fetchProfile()
+        let capturedRequest = requestRecorder.firstRequest
+
+        #expect(capturedRequest?.url?.path.hasSuffix("/users/me") == true)
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer access-token")
+        #expect(profile.id == "42")
+        #expect(profile.nickname == "북극성")
+        #expect(profile.profileImageURL?.absoluteString == "https://example.com/profile.png")
+    }
+
+    @Test func liveProfileRepositoryRetriesAfterUnauthorizedResponse() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let responseJSON = """
+        {
+          "id": 42,
+          "provider": "KAKAO",
+          "role": "USER",
+          "nickname": "재시도",
+          "email": "retry@example.com",
+          "profileImageUrl": null
+        }
+        """
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let isFirstRequest = requestRecorder.paths.count == 1
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: isFirstRequest ? 401 : 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, isFirstRequest ? Data() : Data(responseJSON.utf8))
+        }
+        let repository = LiveProfileRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        let profile = try await repository.fetchProfile()
+
+        #expect(requestRecorder.paths.filter { $0.hasSuffix("/users/me") }.count == 2)
+        #expect(profile.nickname == "재시도")
+    }
+
+    @Test func liveFavoritesRepositoryUsesBookmarkEndpointsAndDecodesItems() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let session = makeStubbedSession { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            requestRecorder.record(request)
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: url.path.contains("/bookmark") ? 204 : 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.hasSuffix("/users/me/bookmarked-books") {
+                return (response, Data(#"{"items":[{"isbn":9791198363510,"title":"아몬드","author":"손원평","coverImageUrl":"https://example.com/book.jpg"}]}"#.utf8))
+            }
+            if url.path.hasSuffix("/users/me/bookmarked-libraries") {
+                return (response, Data(#"{"items":[{"libraryId":1,"name":"구미시립양포도서관","address":"경상북도 구미시 옥계북로 51"}]}"#.utf8))
+            }
+            return (response, Data())
+        }
+        let repository = LiveFavoritesRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        let books = try await repository.fetchFavoriteBooks()
+        let libraries = try await repository.fetchFavoriteLibraries()
+        try await repository.setBookFavorite(id: "9791198363510", isFavorite: false)
+        try await repository.setLibraryFavorite(id: "1", isFavorite: true)
+        let requestedPaths = requestRecorder.paths
+        let requestedMethods = requestRecorder.methods
+
+        #expect(requestedPaths.contains { $0.hasSuffix("/users/me/bookmarked-books") })
+        #expect(requestedPaths.contains { $0.hasSuffix("/users/me/bookmarked-libraries") })
+        #expect(requestedPaths.contains { $0.hasSuffix("/books/9791198363510/bookmark") })
+        #expect(requestedPaths.contains { $0.hasSuffix("/libraries/1/bookmark") })
+        #expect(requestedMethods.contains("DELETE"))
+        #expect(requestedMethods.contains("POST"))
+        #expect(books.first?.id == "9791198363510")
+        #expect(books.first?.isFavorite == true)
+        #expect(libraries.first?.id == "1")
+        #expect(libraries.first?.distanceText == "경상북도 구미시 옥계북로 51")
     }
 
     @Test func alarmViewModelGroupsItemsBySection() async throws {

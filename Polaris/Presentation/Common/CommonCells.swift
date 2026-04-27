@@ -307,6 +307,7 @@ class BookInfoCardCell: UICollectionViewCell {
     let supportingLabel = UILabel()
     let badgeStack = UIStackView()
     let actionsStack = UIStackView()
+    private var titleLeadingConstraint: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -334,9 +335,11 @@ class BookInfoCardCell: UICollectionViewCell {
         containerView.addSubviews(titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack)
         [titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
+        titleLeadingConstraint = titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.l)
+
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AppSpacing.l),
-            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AppSpacing.l),
+            titleLeadingConstraint,
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionsStack.leadingAnchor, constant: -AppSpacing.m),
 
             actionsStack.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
@@ -380,22 +383,80 @@ class BookInfoCardCell: UICollectionViewCell {
             badgeStack.addArrangedSubview(StatusBadgeView(content: badge))
         }
     }
+
+    func setTextContentLeadingInset(_ inset: CGFloat) {
+        titleLeadingConstraint.constant = inset
+    }
 }
 
 final class FavoriteBookCell: BookInfoCardCell {
     static let reuseIdentifier = "FavoriteBookCell"
-    private let bellButton = IconActionButton(symbolName: "bell", accessibilityLabel: "알림 토글")
+    private let coverView = MockBookCoverView()
+    private let detailButton = UIButton(type: .system)
+    private let actionReserveView = UIView()
     private let heartButton = IconActionButton(symbolName: "heart", accessibilityLabel: "찜 토글")
 
-    var onBellTap: (() -> Void)?
+    var onDetailTap: (() -> Void)?
     var onHeartTap: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        actionsStack.addArrangedSubview(bellButton)
-        actionsStack.addArrangedSubview(heartButton)
-        bellButton.addAction(UIAction { [weak self] _ in
-            self?.onBellTap?()
+        coverView.layer.maskedCorners = [
+            .layerMinXMinYCorner,
+            .layerMinXMaxYCorner
+        ]
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        setTextContentLeadingInset(88)
+
+        var detailConfiguration = UIButton.Configuration.tinted()
+        detailConfiguration.title = "상세보기"
+        detailConfiguration.image = UIImage(systemName: "doc.text.viewfinder")
+        detailConfiguration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        detailConfiguration.imagePadding = 3
+        detailConfiguration.baseForegroundColor = AppColor.accent
+        detailConfiguration.baseBackgroundColor = AppColor.accentSurface
+        detailConfiguration.background.cornerRadius = 10
+        detailConfiguration.contentInsets = .init(top: 4, leading: 7, bottom: 4, trailing: 8)
+        detailButton.configuration = detailConfiguration
+        detailButton.accessibilityIdentifier = "favoriteBookCell.detailButton"
+        detailButton.accessibilityLabel = "책 상세보기"
+
+        containerView.addSubview(coverView)
+        coverView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            coverView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            coverView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            coverView.widthAnchor.constraint(equalToConstant: 76),
+            coverView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+
+        containerView.addSubview(detailButton)
+        detailButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            detailButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.l),
+            detailButton.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AppSpacing.l),
+            detailButton.leadingAnchor.constraint(greaterThanOrEqualTo: badgeStack.trailingAnchor, constant: AppSpacing.m)
+        ])
+
+        actionsStack.addArrangedSubview(actionReserveView)
+        actionReserveView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            actionReserveView.widthAnchor.constraint(equalToConstant: 32),
+            actionReserveView.heightAnchor.constraint(equalToConstant: 32)
+        ])
+
+        containerView.addSubview(heartButton)
+        heartButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            heartButton.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AppSpacing.m),
+            heartButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AppSpacing.m),
+            heartButton.widthAnchor.constraint(equalToConstant: 32),
+            heartButton.heightAnchor.constraint(equalToConstant: 32)
+        ])
+
+        detailButton.addAction(UIAction { [weak self] _ in
+            self?.onDetailTap?()
         }, for: .touchUpInside)
         heartButton.addAction(UIAction { [weak self] _ in
             self?.onHeartTap?()
@@ -409,15 +470,13 @@ final class FavoriteBookCell: BookInfoCardCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        onBellTap = nil
+        onDetailTap = nil
         onHeartTap = nil
     }
 
     func configure(viewData: FavoriteBookItemViewData) {
         configure(title: viewData.title, subtitle: viewData.subtitle, badges: viewData.badges)
-        bellButton.setSymbolName(viewData.isAlertEnabled ? "bell.fill" : "bell")
-        bellButton.accessibilityLabel = viewData.isAlertEnabled ? "알림 해제" : "알림 설정"
-        bellButton.setForegroundColor(viewData.isAlertEnabled ? AppColor.accent : AppColor.textTertiary)
+        coverView.configure(seed: viewData.id, imageURL: viewData.coverImageURL)
         heartButton.setSymbolName(viewData.isFavorite ? "heart.fill" : "heart")
         heartButton.accessibilityLabel = viewData.isFavorite ? "찜 해제" : "찜하기"
         heartButton.setForegroundColor(viewData.isFavorite ? AppColor.heart : AppColor.textTertiary)

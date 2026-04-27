@@ -5,6 +5,7 @@
 //  Created by Codex on 4/8/26.
 //
 
+import MapKit
 import UIKit
 #if canImport(SwiftUI)
 import SwiftUI
@@ -52,40 +53,56 @@ final class LibraryDetailViewController: BaseViewController {
 
     private func render(_ state: LibraryDetailViewModel.State) {
         guard let detail = state.detail else { return }
-        contentView.nameLabel.text = detail.name
-        contentView.updateContact(address: detail.address, phone: detail.phone)
-        contentView.updateHours(detail.hours)
-        contentView.updateHolidaySection(regular: detail.regularHolidays, upcoming: detail.upcomingHolidays)
-        contentView.mapPlaceholderLabel.text = detail.mapDescription
+        contentView.render(detail)
     }
 }
 
 private final class DetailInfoRow: UIView {
+    private let iconContainer = UIView()
     private let iconView = UIImageView()
-    private let textLabel = UILabel()
+    private let titleLabel = UILabel()
+    private let valueLabel = UILabel()
 
-    init(symbolName: String, text: String) {
+    init(symbolName: String, title: String) {
         super.init(frame: .zero)
 
+        iconContainer.backgroundColor = AppColor.iconSurface
+        iconContainer.layer.cornerRadius = 17
+        iconContainer.layer.cornerCurve = .continuous
+
         iconView.image = UIImage(systemName: symbolName)
-        iconView.tintColor = AppColor.textSecondary
+        iconView.tintColor = AppColor.accent
         iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         iconView.contentMode = .scaleAspectFit
-        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
-        iconView.setContentHuggingPriority(.required, for: .horizontal)
-        textLabel.font = AppTypography.caption
-        textLabel.textColor = AppColor.textSecondary
-        textLabel.text = text
 
-        let stackView = UIStackView(arrangedSubviews: [iconView, textLabel])
+        titleLabel.font = AppTypography.tiny
+        titleLabel.textColor = AppColor.textTertiary
+        titleLabel.text = title
+
+        valueLabel.font = AppTypography.body
+        valueLabel.textColor = AppColor.textPrimary
+        valueLabel.numberOfLines = 0
+
+        let textStack = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
+        textStack.axis = .vertical
+        textStack.spacing = 3
+
+        let stackView = UIStackView(arrangedSubviews: [iconContainer, textStack])
         stackView.axis = .horizontal
-        stackView.spacing = AppSpacing.s
-        stackView.alignment = .center
+        stackView.spacing = AppSpacing.m
+        stackView.alignment = .top
+
+        iconContainer.addSubview(iconView)
         addSubview(stackView)
-        [stackView, iconView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        [stackView, iconContainer, iconView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
         stackView.pinEdges(to: self)
 
         NSLayoutConstraint.activate([
+            iconContainer.widthAnchor.constraint(equalToConstant: 34),
+            iconContainer.heightAnchor.constraint(equalToConstant: 34),
+
+            iconView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16)
         ])
@@ -96,52 +113,58 @@ private final class DetailInfoRow: UIView {
     }
 
     func update(text: String) {
-        textLabel.text = text
+        valueLabel.text = text
     }
 }
 
 private final class LibraryDetailView: UIView {
     let headerView = NavigationHeaderView(title: "도서관 정보", showsDivider: false)
     let nameLabel = UILabel()
-    let addressLabel = UILabel()
-    let phoneLabel = UILabel()
-    let mapPlaceholderLabel = UILabel()
 
     private let scrollView = UIScrollView()
     private let contentContainer = UIView()
     private let infoCard = CardContainerView()
-    private let hoursCard = CardContainerView()
-    private let holidayCard = CardContainerView()
     private let mapCard = CardContainerView()
+    private let mapView = MKMapView()
+    private let mapFallbackLabel = UILabel()
     private let hoursStack = UIStackView()
+    private let holidayStack = UIStackView()
     private let regularHolidayStack = UIStackView()
     private let upcomingHolidayStack = UIStackView()
-    private let addressRow = DetailInfoRow(symbolName: "mappin.and.ellipse", text: "")
-    private let phoneRow = DetailInfoRow(symbolName: "phone.fill", text: "")
+    private let addressRow = DetailInfoRow(symbolName: "mappin.and.ellipse", title: "주소")
+    private let phoneRow = DetailInfoRow(symbolName: "phone.fill", title: "전화")
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = AppColor.background
         accessibilityIdentifier = "libraryDetailScreen"
 
-        [nameLabel, addressLabel, phoneLabel].forEach {
-            $0.textColor = AppColor.textPrimary
-        }
-        nameLabel.font = AppTypography.headline
-        addressLabel.font = AppTypography.caption
-        phoneLabel.font = AppTypography.caption
+        nameLabel.font = AppTypography.hero
+        nameLabel.textColor = AppColor.textPrimary
+        nameLabel.numberOfLines = 2
 
         hoursStack.axis = .vertical
         hoursStack.spacing = AppSpacing.m
+        holidayStack.axis = .vertical
+        holidayStack.spacing = AppSpacing.m
         regularHolidayStack.axis = .vertical
         regularHolidayStack.spacing = AppSpacing.s
         upcomingHolidayStack.axis = .vertical
         upcomingHolidayStack.spacing = AppSpacing.s
 
-        mapPlaceholderLabel.textAlignment = .center
-        mapPlaceholderLabel.font = AppTypography.caption
-        mapPlaceholderLabel.textColor = AppColor.textSecondary
-        mapPlaceholderLabel.numberOfLines = 0
+        mapView.layer.cornerRadius = AppRadius.medium
+        mapView.layer.cornerCurve = .continuous
+        mapView.clipsToBounds = true
+        mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
+        mapView.isScrollEnabled = false
+        mapView.isZoomEnabled = false
+
+        mapFallbackLabel.textAlignment = .center
+        mapFallbackLabel.font = AppTypography.caption
+        mapFallbackLabel.textColor = AppColor.textSecondary
+        mapFallbackLabel.numberOfLines = 0
+        mapFallbackLabel.isHidden = true
 
         addSubviews(headerView, scrollView)
         headerView.translatesAutoresizingMaskIntoConstraints = false
@@ -167,8 +190,6 @@ private final class LibraryDetailView: UIView {
         ])
 
         setupInfoCard()
-        setupHoursCard()
-        setupHolidayCard()
         setupMapCard()
     }
 
@@ -177,123 +198,119 @@ private final class LibraryDetailView: UIView {
     }
 
     private func setupInfoCard() {
-        infoCard.addSubviews(nameLabel, addressRow, phoneRow)
-        [nameLabel, addressRow, phoneRow].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        let hoursTitle = makeCardTitle("운영 시간")
+        let holidayTitle = makeCardTitle("휴관일 안내")
+        holidayStack.addArrangedSubview(makeHolidayGroup(title: "정기", contentStack: regularHolidayStack))
+        holidayStack.addArrangedSubview(makeHolidayGroup(title: "예정", contentStack: upcomingHolidayStack))
+
+        infoCard.addSubviews(
+            nameLabel,
+            addressRow,
+            phoneRow,
+            hoursTitle,
+            hoursStack,
+            holidayTitle,
+            holidayStack
+        )
+        [
+            nameLabel,
+            addressRow,
+            phoneRow,
+            hoursTitle,
+            hoursStack,
+            holidayTitle,
+            holidayStack
+        ].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         addCard(infoCard, topAnchor: contentContainer.topAnchor)
 
         NSLayoutConstraint.activate([
-            nameLabel.topAnchor.constraint(equalTo: infoCard.topAnchor, constant: AppSpacing.l),
-            nameLabel.leadingAnchor.constraint(equalTo: infoCard.leadingAnchor, constant: AppSpacing.l),
-            nameLabel.trailingAnchor.constraint(equalTo: infoCard.trailingAnchor, constant: -AppSpacing.l),
+            nameLabel.topAnchor.constraint(equalTo: infoCard.topAnchor, constant: AppSpacing.xxl),
+            nameLabel.leadingAnchor.constraint(equalTo: infoCard.leadingAnchor, constant: AppSpacing.xxl),
+            nameLabel.trailingAnchor.constraint(equalTo: infoCard.trailingAnchor, constant: -AppSpacing.xxl),
 
-            addressRow.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: AppSpacing.m),
+            addressRow.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: AppSpacing.xl),
             addressRow.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             addressRow.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
 
-            phoneRow.topAnchor.constraint(equalTo: addressRow.bottomAnchor, constant: AppSpacing.s),
+            phoneRow.topAnchor.constraint(equalTo: addressRow.bottomAnchor, constant: AppSpacing.l),
             phoneRow.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             phoneRow.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
-            phoneRow.bottomAnchor.constraint(equalTo: infoCard.bottomAnchor, constant: -AppSpacing.l)
-        ])
-    }
 
-    private func setupHoursCard() {
-        let titleLabel = makeCardTitle("운영 시간")
-        hoursCard.addSubviews(titleLabel, hoursStack)
-        [titleLabel, hoursStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+            hoursTitle.topAnchor.constraint(equalTo: phoneRow.bottomAnchor, constant: AppSpacing.xxl),
+            hoursTitle.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            hoursTitle.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
 
-        addCard(hoursCard, topAnchor: infoCard.bottomAnchor)
+            hoursStack.topAnchor.constraint(equalTo: hoursTitle.bottomAnchor, constant: AppSpacing.m),
+            hoursStack.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            hoursStack.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
 
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: hoursCard.topAnchor, constant: AppSpacing.l),
-            titleLabel.leadingAnchor.constraint(equalTo: hoursCard.leadingAnchor, constant: AppSpacing.l),
-            titleLabel.trailingAnchor.constraint(equalTo: hoursCard.trailingAnchor, constant: -AppSpacing.l),
+            holidayTitle.topAnchor.constraint(equalTo: hoursStack.bottomAnchor, constant: AppSpacing.xxxl + AppSpacing.m),
+            holidayTitle.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            holidayTitle.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
 
-            hoursStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
-            hoursStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            hoursStack.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            hoursStack.bottomAnchor.constraint(equalTo: hoursCard.bottomAnchor, constant: -AppSpacing.l)
-        ])
-    }
-
-    private func setupHolidayCard() {
-        let titleLabel = makeCardTitle("휴관일 안내")
-        let regularTitle = makeSectionCaption("정기 휴관일")
-        let upcomingTitle = makeSectionCaption("예정된 휴관일")
-
-        holidayCard.addSubviews(titleLabel, regularTitle, regularHolidayStack, upcomingTitle, upcomingHolidayStack)
-        [titleLabel, regularTitle, regularHolidayStack, upcomingTitle, upcomingHolidayStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
-
-        addCard(holidayCard, topAnchor: hoursCard.bottomAnchor)
-
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: holidayCard.topAnchor, constant: AppSpacing.l),
-            titleLabel.leadingAnchor.constraint(equalTo: holidayCard.leadingAnchor, constant: AppSpacing.l),
-
-            regularTitle.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
-            regularTitle.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-
-            regularHolidayStack.topAnchor.constraint(equalTo: regularTitle.bottomAnchor, constant: AppSpacing.s),
-            regularHolidayStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            regularHolidayStack.trailingAnchor.constraint(equalTo: holidayCard.trailingAnchor, constant: -AppSpacing.l),
-
-            upcomingTitle.topAnchor.constraint(equalTo: regularHolidayStack.bottomAnchor, constant: AppSpacing.l),
-            upcomingTitle.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-
-            upcomingHolidayStack.topAnchor.constraint(equalTo: upcomingTitle.bottomAnchor, constant: AppSpacing.s),
-            upcomingHolidayStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            upcomingHolidayStack.trailingAnchor.constraint(equalTo: holidayCard.trailingAnchor, constant: -AppSpacing.l),
-            upcomingHolidayStack.bottomAnchor.constraint(equalTo: holidayCard.bottomAnchor, constant: -AppSpacing.l)
+            holidayStack.topAnchor.constraint(equalTo: holidayTitle.bottomAnchor, constant: AppSpacing.l),
+            holidayStack.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            holidayStack.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
+            holidayStack.bottomAnchor.constraint(equalTo: infoCard.bottomAnchor, constant: -AppSpacing.xxl)
         ])
     }
 
     private func setupMapCard() {
         let titleLabel = makeCardTitle("위치")
-        let mapPlaceholder = UIView()
-        mapPlaceholder.backgroundColor = AppColor.iconSurface
-        mapPlaceholder.layer.cornerRadius = AppRadius.medium
-        mapPlaceholder.layer.cornerCurve = .continuous
-        mapPlaceholder.layer.borderWidth = 1
-        mapPlaceholder.layer.borderColor = AppColor.line.cgColor
+        mapCard.addSubviews(titleLabel, mapView, mapFallbackLabel)
+        [titleLabel, mapView, mapFallbackLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
-        mapCard.addSubviews(titleLabel, mapPlaceholder, mapPlaceholderLabel)
-        [titleLabel, mapPlaceholder, mapPlaceholderLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
-
-        addCard(mapCard, topAnchor: holidayCard.bottomAnchor, bottom: true)
+        addCard(mapCard, topAnchor: infoCard.bottomAnchor, bottom: true)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: mapCard.topAnchor, constant: AppSpacing.l),
             titleLabel.leadingAnchor.constraint(equalTo: mapCard.leadingAnchor, constant: AppSpacing.l),
+            titleLabel.trailingAnchor.constraint(equalTo: mapCard.trailingAnchor, constant: -AppSpacing.l),
 
-            mapPlaceholder.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
-            mapPlaceholder.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            mapPlaceholder.trailingAnchor.constraint(equalTo: mapCard.trailingAnchor, constant: -AppSpacing.l),
-            mapPlaceholder.heightAnchor.constraint(equalToConstant: 140),
-            mapPlaceholder.bottomAnchor.constraint(equalTo: mapCard.bottomAnchor, constant: -AppSpacing.l),
+            mapView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: AppSpacing.l),
+            mapView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            mapView.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            mapView.heightAnchor.constraint(equalToConstant: 190),
+            mapView.bottomAnchor.constraint(equalTo: mapCard.bottomAnchor, constant: -AppSpacing.l),
 
-            mapPlaceholderLabel.centerXAnchor.constraint(equalTo: mapPlaceholder.centerXAnchor),
-            mapPlaceholderLabel.centerYAnchor.constraint(equalTo: mapPlaceholder.centerYAnchor)
+            mapFallbackLabel.centerXAnchor.constraint(equalTo: mapView.centerXAnchor),
+            mapFallbackLabel.centerYAnchor.constraint(equalTo: mapView.centerYAnchor),
+            mapFallbackLabel.leadingAnchor.constraint(equalTo: mapView.leadingAnchor, constant: AppSpacing.l),
+            mapFallbackLabel.trailingAnchor.constraint(equalTo: mapView.trailingAnchor, constant: -AppSpacing.l)
         ])
     }
 
-    func updateHours(_ hours: [OperatingHour]) {
+    func render(_ detail: LibraryDetail) {
+        nameLabel.text = detail.name
+        updateContact(address: detail.address, phone: detail.phone)
+        updateHours(detail.hours)
+        updateHolidaySection(regular: detail.regularHolidays, upcoming: detail.upcomingHolidays)
+        updateMap(detail)
+    }
+
+    private func updateHours(_ hours: [OperatingHour]) {
         hoursStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         hours.forEach { item in
             let row = UIStackView()
             row.axis = .horizontal
-            row.distribution = .fill
+            row.alignment = .center
+            row.spacing = AppSpacing.m
 
             let dayLabel = UILabel()
-            dayLabel.font = AppTypography.body
+            dayLabel.font = AppTypography.subheadline
             dayLabel.textColor = AppColor.textSecondary
             dayLabel.text = item.day
 
             let timeLabel = UILabel()
-            timeLabel.font = AppTypography.body
-            timeLabel.text = item.hoursText
+            timeLabel.font = AppTypography.subheadline
+            timeLabel.textAlignment = .right
+            timeLabel.text = prettyHoursText(item.hoursText)
             timeLabel.textColor = item.isClosed ? AppColor.danger : AppColor.textPrimary
+            timeLabel.numberOfLines = 1
+            timeLabel.adjustsFontSizeToFitWidth = true
+            timeLabel.minimumScaleFactor = 0.85
 
             row.addArrangedSubview(dayLabel)
             row.addArrangedSubview(UIView())
@@ -302,12 +319,21 @@ private final class LibraryDetailView: UIView {
         }
     }
 
-    func updateHolidaySection(regular: [HolidayEntry], upcoming: [HolidayEntry]) {
+    private func updateHolidaySection(regular: [HolidayEntry], upcoming: [HolidayEntry]) {
         regularHolidayStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         upcomingHolidayStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        regular.forEach { regularHolidayStack.addArrangedSubview(makePill($0.title)) }
-        upcoming.forEach { upcomingHolidayStack.addArrangedSubview(makePill($0.title)) }
+        if regular.isEmpty {
+            regularHolidayStack.addArrangedSubview(makePlainHolidayLabel("정보 없음"))
+        } else {
+            regular.forEach { regularHolidayStack.addArrangedSubview(makePlainHolidayLabel($0.title)) }
+        }
+
+        if upcoming.isEmpty {
+            upcomingHolidayStack.addArrangedSubview(makePlainHolidayLabel("예정된 휴관일이 없어요"))
+        } else {
+            upcoming.forEach { upcomingHolidayStack.addArrangedSubview(makePlainHolidayLabel($0.title)) }
+        }
     }
 
     private func addCard(_ card: UIView, topAnchor: NSLayoutYAxisAnchor, bottom: Bool = false) {
@@ -341,35 +367,96 @@ private final class LibraryDetailView: UIView {
         return label
     }
 
-    private func makePill(_ title: String) -> UIView {
+    private func makeHolidayGroup(title: String, contentStack: UIStackView) -> UIView {
+        let titleLabel = makeSectionCaption(title)
+        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let row = UIStackView(arrangedSubviews: [titleLabel, contentStack])
+        row.axis = .horizontal
+        row.alignment = .top
+        row.spacing = AppSpacing.l
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            titleLabel.widthAnchor.constraint(equalToConstant: 44)
+        ])
+
+        return row
+    }
+
+    private func makePlainHolidayLabel(_ title: String) -> UILabel {
         let label = UILabel()
         label.text = title
         label.font = AppTypography.caption
-        label.textColor = AppColor.textPrimary
-
-        let container = UIView()
-        container.backgroundColor = AppColor.chipFill
-        container.layer.cornerRadius = 12
-        container.layer.cornerCurve = .continuous
-        container.layer.borderWidth = 1
-        container.layer.borderColor = AppColor.line.cgColor
-        container.addSubview(label)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: container.topAnchor, constant: AppSpacing.s),
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: AppSpacing.m),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -AppSpacing.m),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -AppSpacing.s)
-        ])
-
-        return container
+        label.textColor = AppColor.textSecondary
+        label.numberOfLines = 0
+        return label
     }
 
-    func updateContact(address: String, phone: String) {
+    private func updateContact(address: String, phone: String) {
         addressRow.update(text: address)
         phoneRow.update(text: phone)
     }
+
+    private func updateMap(_ detail: LibraryDetail) {
+        mapView.removeAnnotations(mapView.annotations)
+        guard let latitude = detail.latitude, let longitude = detail.longitude else {
+            mapView.isHidden = true
+            mapFallbackLabel.isHidden = false
+            mapFallbackLabel.text = detail.mapDescription
+            return
+        }
+
+        mapView.isHidden = false
+        mapFallbackLabel.isHidden = true
+
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        let region = MKCoordinateRegion(
+            center: coordinate,
+            latitudinalMeters: 650,
+            longitudinalMeters: 650
+        )
+        mapView.setRegion(region, animated: false)
+
+        let annotation = MKPointAnnotation()
+        annotation.coordinate = coordinate
+        annotation.title = detail.name
+        annotation.subtitle = detail.address
+        mapView.addAnnotation(annotation)
+    }
+}
+
+private func prettyHoursText(_ rawText: String) -> String {
+    let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmedText.contains(":") else { return trimmedText }
+
+    let separators = [" - ", " ~ ", "~", "-"]
+    guard let separator = separators.first(where: { trimmedText.contains($0) }) else {
+        return prettyClockText(trimmedText)
+    }
+
+    let parts = trimmedText.components(separatedBy: separator)
+    guard parts.count == 2 else { return trimmedText }
+    return "\(prettyClockText(parts[0])) ~ \(prettyClockText(parts[1]))"
+}
+
+private func prettyClockText(_ rawText: String) -> String {
+    let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parts = trimmedText.split(separator: ":").compactMap { Int($0) }
+    guard let hour24 = parts.first else { return trimmedText }
+
+    let minute = parts.count > 1 ? parts[1] : 0
+    let period = hour24 < 12 ? "오전" : "오후"
+    let hour12 = {
+        let value = hour24 % 12
+        return value == 0 ? 12 : value
+    }()
+
+    if minute == 0 {
+        return "\(period) \(hour12)시"
+    }
+    return "\(period) \(hour12)시 \(minute)분"
 }
 
 #if DEBUG && canImport(SwiftUI)
