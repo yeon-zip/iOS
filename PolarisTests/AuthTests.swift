@@ -83,6 +83,7 @@ private actor RecordingAuthRepository: AuthRepository {
     }
 }
 
+@Suite(.serialized)
 struct AuthTests {
     @Test func authRepositoryBuildsKakaoLoginURLWithAppPKCEParameters() async throws {
         let repository = LiveAuthRepository(
@@ -256,9 +257,11 @@ struct AuthTests {
         return AppDependencies(
             searchRepository: mock.searchRepository,
             bookRepository: mock.bookRepository,
+            bookVoteRepository: mock.bookVoteRepository,
             libraryRepository: mock.libraryRepository,
             favoritesRepository: mock.favoritesRepository,
             alertsRepository: mock.alertsRepository,
+            pushNotificationRepository: mock.pushNotificationRepository,
             profileRepository: mock.profileRepository,
             authRepository: authRepository,
             locationAddressService: mock.locationAddressService

@@ -60,7 +60,7 @@ final class LikeViewModel {
                 title: library.name,
                 distanceText: library.distanceText,
                 badges: [BadgeContent(title: "찜한 도서관", tone: .blue)],
-                showsBell: true,
+                showsBell: false,
                 showsFavorite: true,
                 isBellActive: library.isAlertEnabled,
                 isFavorite: library.isFavorite

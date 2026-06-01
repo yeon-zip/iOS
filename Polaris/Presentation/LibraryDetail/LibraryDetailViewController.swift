@@ -144,7 +144,7 @@ private final class LibraryDetailView: UIView {
         nameLabel.numberOfLines = 2
 
         hoursStack.axis = .vertical
-        hoursStack.spacing = AppSpacing.m
+        hoursStack.spacing = 10
         holidayStack.axis = .vertical
         holidayStack.spacing = AppSpacing.m
         regularHolidayStack.axis = .vertical
@@ -302,20 +302,28 @@ private final class LibraryDetailView: UIView {
             dayLabel.font = AppTypography.subheadline
             dayLabel.textColor = AppColor.textSecondary
             dayLabel.text = item.day
+            dayLabel.setContentHuggingPriority(.required, for: .horizontal)
+            dayLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
             let timeLabel = UILabel()
-            timeLabel.font = AppTypography.subheadline
+            timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
             timeLabel.textAlignment = .right
-            timeLabel.text = prettyHoursText(item.hoursText)
+            timeLabel.text = item.hoursText
             timeLabel.textColor = item.isClosed ? AppColor.danger : AppColor.textPrimary
             timeLabel.numberOfLines = 1
             timeLabel.adjustsFontSizeToFitWidth = true
             timeLabel.minimumScaleFactor = 0.85
+            timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
             row.addArrangedSubview(dayLabel)
             row.addArrangedSubview(UIView())
             row.addArrangedSubview(timeLabel)
             hoursStack.addArrangedSubview(row)
+
+            dayLabel.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                dayLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 46)
+            ])
         }
     }
 
@@ -425,38 +433,6 @@ private final class LibraryDetailView: UIView {
         annotation.subtitle = detail.address
         mapView.addAnnotation(annotation)
     }
-}
-
-private func prettyHoursText(_ rawText: String) -> String {
-    let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmedText.contains(":") else { return trimmedText }
-
-    let separators = [" - ", " ~ ", "~", "-"]
-    guard let separator = separators.first(where: { trimmedText.contains($0) }) else {
-        return prettyClockText(trimmedText)
-    }
-
-    let parts = trimmedText.components(separatedBy: separator)
-    guard parts.count == 2 else { return trimmedText }
-    return "\(prettyClockText(parts[0])) ~ \(prettyClockText(parts[1]))"
-}
-
-private func prettyClockText(_ rawText: String) -> String {
-    let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let parts = trimmedText.split(separator: ":").compactMap { Int($0) }
-    guard let hour24 = parts.first else { return trimmedText }
-
-    let minute = parts.count > 1 ? parts[1] : 0
-    let period = hour24 < 12 ? "오전" : "오후"
-    let hour12 = {
-        let value = hour24 % 12
-        return value == 0 ? 12 : value
-    }()
-
-    if minute == 0 {
-        return "\(period) \(hour12)시"
-    }
-    return "\(period) \(hour12)시 \(minute)분"
 }
 
 #if DEBUG && canImport(SwiftUI)

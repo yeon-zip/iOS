@@ -148,7 +148,7 @@ final class HomeViewModel {
                 title: library.name,
                 distanceText: library.distanceText,
                 badges: [makeOperatingBadge(library.operatingStatus)],
-                showsBell: true,
+                showsBell: false,
                 showsFavorite: true,
                 isBellActive: library.isAlertEnabled,
                 isFavorite: favoriteLibraryIDs.contains(library.id) || library.isFavorite

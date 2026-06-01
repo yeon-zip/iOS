@@ -58,6 +58,51 @@ enum FavoriteTab: Int, CaseIterable, Hashable, Sendable {
     }
 }
 
+enum BookVoteType: String, Codable, Hashable, Sendable {
+    case recommend = "RECOMMEND"
+    case notRecommend = "NOT_RECOMMEND"
+
+    var title: String {
+        switch self {
+        case .recommend:
+            "추천"
+        case .notRecommend:
+            "비추천"
+        }
+    }
+}
+
+struct BookVoteSummary: Hashable, Sendable {
+    let recommendCount: Int
+    let notRecommendCount: Int
+    let myVote: BookVoteType?
+
+    var totalCount: Int {
+        recommendCount + notRecommendCount
+    }
+
+    static let empty = BookVoteSummary(recommendCount: 0, notRecommendCount: 0, myVote: nil)
+
+    func applying(_ voteType: BookVoteType) -> BookVoteSummary {
+        guard voteType == .recommend, myVote != .recommend else { return self }
+
+        var nextRecommendCount = recommendCount
+        var nextNotRecommendCount = notRecommendCount
+
+        if myVote == .notRecommend {
+            nextNotRecommendCount = max(0, nextNotRecommendCount - 1)
+        }
+
+        nextRecommendCount += 1
+
+        return BookVoteSummary(
+            recommendCount: nextRecommendCount,
+            notRecommendCount: nextNotRecommendCount,
+            myVote: voteType
+        )
+    }
+}
+
 enum AlertSection: Int, CaseIterable, Hashable, Sendable {
     case available
     case waiting
@@ -65,9 +110,9 @@ enum AlertSection: Int, CaseIterable, Hashable, Sendable {
     var title: String {
         switch self {
         case .available:
-            "대출 가능"
+            "대출 가능 알림"
         case .waiting:
-            "대기중"
+            "알림 신청 목록"
         }
     }
 }
@@ -117,6 +162,7 @@ struct BookSummary: Identifiable, Hashable, Sendable {
     let isFavorite: Bool
     let isAlertEnabled: Bool
     let loanStatus: LoanStatus?
+    let voteSummary: BookVoteSummary
 }
 
 struct BookDetail: Hashable, Sendable {
@@ -128,6 +174,7 @@ struct BookDetail: Hashable, Sendable {
     let coverImageURL: URL?
     let summary: String
     let isFavorite: Bool
+    let voteSummary: BookVoteSummary
 }
 
 struct LibrarySummary: Identifiable, Hashable, Sendable {
@@ -169,7 +216,28 @@ struct AlertItem: Identifiable, Hashable, Sendable {
     let id: String
     let section: AlertSection
     let book: BookSummary
+    let libraryID: String
     let libraryName: String
+    let message: String?
+    let createdAt: String?
+
+    init(
+        id: String,
+        section: AlertSection,
+        book: BookSummary,
+        libraryID: String,
+        libraryName: String,
+        message: String? = nil,
+        createdAt: String? = nil
+    ) {
+        self.id = id
+        self.section = section
+        self.book = book
+        self.libraryID = libraryID
+        self.libraryName = libraryName
+        self.message = message
+        self.createdAt = createdAt
+    }
 }
 
 struct UserProfile: Hashable, Sendable {

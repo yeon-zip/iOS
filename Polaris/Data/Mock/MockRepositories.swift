@@ -98,13 +98,44 @@ final class PolarisAPIClient {
         }
     }
 
-    func sendOrThrow(_ path: String, method: HTTPMethod, accessToken: String? = nil) async throws {
+    func sendOrThrow(
+        _ path: String,
+        method: HTTPMethod,
+        queryItems: [URLQueryItem] = [],
+        accessToken: String? = nil
+    ) async throws {
         guard let request = makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            accessToken: accessToken
+        ) else { throw PolarisAPIClientError.invalidURL }
+
+        _ = try await perform(request)
+    }
+
+    func sendJSONOrThrow<Body: Encodable>(
+        _ path: String,
+        method: HTTPMethod,
+        body: Body,
+        accessToken: String? = nil
+    ) async throws {
+        guard var request = makeRequest(
             path: path,
             method: method,
             queryItems: [],
             accessToken: accessToken
         ) else { throw PolarisAPIClientError.invalidURL }
+
+        request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            debugLog("Encoding failed for: \(request.url?.absoluteString ?? path)")
+            debugLog("\(error)")
+            throw PolarisAPIClientError.encodingFailure
+        }
 
         _ = try await perform(request)
     }
@@ -156,6 +187,7 @@ final class PolarisAPIClient {
 enum HTTPMethod: String {
     case get = "GET"
     case post = "POST"
+    case put = "PUT"
     case delete = "DELETE"
 }
 
@@ -163,6 +195,7 @@ enum PolarisAPIClientError: Error, Equatable {
     case invalidURL
     case httpStatus(Int)
     case networkFailure
+    case encodingFailure
     case decodingFailure
 }
 
@@ -244,6 +277,24 @@ private extension KeyedDecodingContainer {
         return nil
     }
 
+    func decodeFlexibleOptionalInt(forKey key: Key) throws -> Int? {
+        guard contains(key) else { return nil }
+        if (try? decodeNil(forKey: key)) == true { return nil }
+        if let value = try? decode(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Int64.self, forKey: key) {
+            return Int(value)
+        }
+        if let value = try? decode(Double.self, forKey: key) {
+            return Int(value)
+        }
+        if let value = try? decode(String.self, forKey: key) {
+            return Int(value)
+        }
+        return nil
+    }
+
     func decodeFlexibleOptionalBool(forKey key: Key) throws -> Bool? {
         guard contains(key) else { return nil }
         if (try? decodeNil(forKey: key)) == true { return nil }
@@ -271,6 +322,19 @@ private struct APIPageResponse<Item: Decodable>: Decodable {
     let hasNext: Bool
     let nextCursor: String?
     let items: [Item]
+
+    enum CodingKeys: String, CodingKey {
+        case hasNext
+        case nextCursor
+        case items
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hasNext = try container.decodeFlexibleOptionalBool(forKey: .hasNext) ?? false
+        nextCursor = try container.decodeFlexibleOptionalString(forKey: .nextCursor)
+        items = try container.decodeIfPresent([Item].self, forKey: .items) ?? []
+    }
 }
 
 private struct APICurrentUserDTO: Decodable {
@@ -347,7 +411,8 @@ private struct APIBookmarkedBookDTO: Decodable {
             coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
             isFavorite: true,
             isAlertEnabled: false,
-            loanStatus: nil
+            loanStatus: nil,
+            voteSummary: .empty
         )
     }
 }
@@ -400,6 +465,9 @@ private struct APIBookDTO: Decodable {
     let publicationDate: String?
     let coverImageURLString: String?
     let isBookmarked: Bool
+    let recommendCount: Int
+    let notRecommendCount: Int
+    let myVote: BookVoteType?
 
     enum CodingKeys: String, CodingKey {
         case isbn
@@ -411,6 +479,9 @@ private struct APIBookDTO: Decodable {
         case coverImageURLString = "coverImageUrl"
         case isBookmarked
         case bookmarked
+        case recommendCount
+        case notRecommendCount
+        case myVote
     }
 
     init(from decoder: Decoder) throws {
@@ -425,6 +496,12 @@ private struct APIBookDTO: Decodable {
         isBookmarked = try container.decodeFlexibleOptionalBool(forKey: .isBookmarked)
             ?? container.decodeFlexibleOptionalBool(forKey: .bookmarked)
             ?? false
+        recommendCount = try container.decodeFlexibleOptionalInt(forKey: .recommendCount) ?? 0
+        notRecommendCount = try container.decodeFlexibleOptionalInt(forKey: .notRecommendCount) ?? 0
+        myVote = try container
+            .decodeFlexibleOptionalString(forKey: .myVote)
+            .map { $0.uppercased() }
+            .flatMap(BookVoteType.init(rawValue:))
     }
 
     func toSummary() -> BookSummary {
@@ -437,7 +514,8 @@ private struct APIBookDTO: Decodable {
             coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
             isFavorite: isBookmarked,
             isAlertEnabled: false,
-            loanStatus: nil
+            loanStatus: nil,
+            voteSummary: voteSummary
         )
     }
 
@@ -450,7 +528,16 @@ private struct APIBookDTO: Decodable {
             year: publicationYearText(from: publicationDate),
             coverImageURL: coverImageURLString.flatMap(URL.init(string:)),
             summary: nonEmpty(description?.normalizedMultilineText, placeholder: "도서 설명 정보 없음"),
-            isFavorite: isBookmarked
+            isFavorite: isBookmarked,
+            voteSummary: voteSummary
+        )
+    }
+
+    private var voteSummary: BookVoteSummary {
+        BookVoteSummary(
+            recommendCount: recommendCount,
+            notRecommendCount: notRecommendCount,
+            myVote: myVote
         )
     }
 }
@@ -597,6 +684,164 @@ private struct APIBookAvailabilityDTO: Decodable {
         guard let loanAvailable else { return nil }
         return loanAvailable ? .available : .borrowed
     }
+}
+
+private struct APIUserNotificationDTO: Decodable {
+    let notificationId: String
+    let isbn: String
+    let bookTitle: String?
+    let libraryId: String
+    let libraryName: String?
+    let message: String?
+    let notificationDate: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case notificationId
+        case id
+        case isbn
+        case bookTitle
+        case libraryId
+        case libraryName
+        case message
+        case notificationDate
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        notificationId = try container.decodeFlexibleOptionalString(forKey: .notificationId)
+            ?? container.decodeFlexibleString(forKey: .id)
+        isbn = try container.decodeFlexibleString(forKey: .isbn)
+        bookTitle = try container.decodeIfPresent(String.self, forKey: .bookTitle)
+        libraryId = try container.decodeFlexibleString(forKey: .libraryId)
+        libraryName = try container.decodeIfPresent(String.self, forKey: .libraryName)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        notificationDate = try container.decodeFlexibleOptionalString(forKey: .notificationDate)
+        createdAt = try container.decodeFlexibleOptionalString(forKey: .createdAt)
+    }
+
+    func toAlertItem() -> AlertItem {
+        AlertItem(
+            id: notificationId,
+            section: .available,
+            book: BookSummary(
+                id: isbn,
+                title: nonEmpty(bookTitle, placeholder: "도서명 정보 없음"),
+                author: "",
+                publisher: "",
+                year: "",
+                coverImageURL: bookCoverURLFromISBN(isbn),
+                isFavorite: false,
+                isAlertEnabled: true,
+                loanStatus: .available,
+                voteSummary: .empty
+            ),
+            libraryID: libraryId,
+            libraryName: nonEmpty(libraryName, placeholder: "도서관명 정보 없음"),
+            message: message?.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdAt: createdAt ?? notificationDate
+        )
+    }
+}
+
+private struct APINotificationSubscriptionsResponse: Decodable {
+    let items: [APINotificationSubscriptionDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case items
+    }
+
+    init(from decoder: Decoder) throws {
+        if let subscriptions = try? [APINotificationSubscriptionDTO](from: decoder) {
+            items = subscriptions
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decodeIfPresent([APINotificationSubscriptionDTO].self, forKey: .items) ?? []
+    }
+}
+
+private struct APINotificationSubscriptionDTO: Decodable {
+    let subscriptionId: String
+    let isbn: String
+    let title: String?
+    let author: String?
+    let coverImageURLString: String?
+    let libraryId: String
+    let libraryName: String?
+    let lastStableAvailability: String?
+    let lastCheckOutcome: String?
+
+    enum CodingKeys: String, CodingKey {
+        case subscriptionId
+        case id
+        case isbn
+        case title
+        case author
+        case coverImageURLString = "coverImageUrl"
+        case libraryId
+        case libraryName
+        case lastStableAvailability
+        case lastCheckOutcome
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        subscriptionId = try container.decodeFlexibleOptionalString(forKey: .subscriptionId)
+            ?? container.decodeFlexibleString(forKey: .id)
+        isbn = try container.decodeFlexibleString(forKey: .isbn)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+        coverImageURLString = try container.decodeFlexibleOptionalString(forKey: .coverImageURLString)
+        libraryId = try container.decodeFlexibleString(forKey: .libraryId)
+        libraryName = try container.decodeIfPresent(String.self, forKey: .libraryName)
+        lastStableAvailability = try container.decodeFlexibleOptionalString(forKey: .lastStableAvailability)
+        lastCheckOutcome = try container.decodeFlexibleOptionalString(forKey: .lastCheckOutcome)
+    }
+
+    func toAlertItem() -> AlertItem {
+        let loanStatus = inferredLoanStatus
+        return AlertItem(
+            id: subscriptionId,
+            section: loanStatus == .available ? .available : .waiting,
+            book: BookSummary(
+                id: isbn,
+                title: nonEmpty(title, placeholder: "도서명 정보 없음"),
+                author: nonEmpty(author, placeholder: "저자 정보 없음"),
+                publisher: "",
+                year: "",
+                coverImageURL: coverImageURLString.flatMap(URL.init(string:)) ?? bookCoverURLFromISBN(isbn),
+                isFavorite: false,
+                isAlertEnabled: true,
+                loanStatus: loanStatus,
+                voteSummary: .empty
+            ),
+            libraryID: libraryId,
+            libraryName: nonEmpty(libraryName, placeholder: "도서관명 정보 없음")
+        )
+    }
+
+    private var inferredLoanStatus: LoanStatus {
+        let rawValue = (lastStableAvailability ?? lastCheckOutcome ?? "").uppercased()
+        switch rawValue {
+        case "AVAILABLE", "LOAN_AVAILABLE", "CAN_LOAN", "TRUE":
+            return .available
+        default:
+            return .notificationReady
+        }
+    }
+}
+
+private struct APIAlertSubscriptionRequest: Encodable {
+    let isbn: String
+    let libraryId: Int64
+}
+
+private struct APIPushTokenRequest: Encodable {
+    let platform = "IOS"
+    let deviceToken: String
 }
 
 private struct APILibraryDetailDTO: Decodable {
@@ -819,24 +1064,12 @@ private func distanceText(from distanceKm: Double?) -> String {
 }
 
 private func operatingTimeRangeText(openTime: String, closeTime: String) -> String {
-    let range = normalizedTimeRange(start: openTime, end: closeTime)
-    return "\(clockText(range.start)) ~ \(clockText(range.end))"
+    "\(clockText(openTime)) ~ \(clockText(closeTime))"
 }
 
-private func normalizedTimeRange(start: String, end: String) -> (start: String, end: String) {
-    guard let startMinutes = minutesSinceMidnight(from: start),
-          let endMinutes = minutesSinceMidnight(from: end),
-          startMinutes > endMinutes else {
-        return (start, end)
-    }
-    return (end, start)
-}
-
-private func minutesSinceMidnight(from rawValue: String) -> Int? {
-    let parts = rawValue.split(separator: ":").compactMap { Int($0) }
-    guard let hour = parts.first else { return nil }
-    let minute = parts.count > 1 ? parts[1] : 0
-    return hour * 60 + minute
+private func bookCoverURLFromISBN(_ isbn: String) -> URL? {
+    guard isbn.isEmpty == false else { return nil }
+    return URL(string: "https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/\(isbn).jpg")
 }
 
 private func clockText(_ rawValue: String) -> String {
@@ -844,9 +1077,10 @@ private func clockText(_ rawValue: String) -> String {
     guard let hour24 = parts.first else { return rawValue }
 
     let minute = parts.count > 1 ? parts[1] : 0
-    let period = hour24 < 12 ? "오전" : "오후"
+    let normalizedHour = hour24 % 24
+    let period = normalizedHour < 12 ? "오전" : "오후"
     let hour12 = {
-        let value = hour24 % 12
+        let value = normalizedHour % 12
         return value == 0 ? 12 : value
     }()
 
@@ -959,6 +1193,65 @@ struct LiveBookRepository: BookRepository {
     func fetchBookDetail(id: String) async -> BookDetail? {
         let book: APIBookDTO? = await apiClient.get("books/\(id)")
         return book?.toDetail()
+    }
+}
+
+private struct APIBookVoteRequest: Encodable {
+    let voteType: BookVoteType
+}
+
+struct LiveBookVoteRepository: BookVoteRepository {
+    private let apiClient: PolarisAPIClient
+    private let authRepository: any AuthRepository
+
+    init(apiClient: PolarisAPIClient, authRepository: any AuthRepository) {
+        self.apiClient = apiClient
+        self.authRepository = authRepository
+    }
+
+    func voteBook(id: String, voteType: BookVoteType) async throws {
+        guard id.isEmpty == false else { throw PolarisAPIClientError.invalidURL }
+        try await authorizedSendJSON(
+            "books/\(id)/vote",
+            method: .put,
+            body: APIBookVoteRequest(voteType: voteType)
+        )
+    }
+
+    private func authorizedSendJSON<Body: Encodable>(_ path: String, method: HTTPMethod, body: Body) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendJSONOrThrow(path, method: method, body: body, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendJSONOrThrow(
+                    path,
+                    method: method,
+                    body: body,
+                    accessToken: refreshedSession.accessToken
+                )
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func restoredSession() async throws -> AuthSession {
+        guard let session = await authRepository.restoreSession() else {
+            throw RepositoryError.unauthenticated
+        }
+        return session
+    }
+
+    private func refreshedSessionOrClear() async throws -> AuthSession {
+        do {
+            return try await authRepository.refresh()
+        } catch {
+            await authRepository.clearLocalSession()
+            throw error
+        }
     }
 }
 
@@ -1110,6 +1403,238 @@ struct LiveFavoritesRepository: FavoritesRepository {
     }
 }
 
+struct LiveAlertsRepository: AlertsRepository {
+    private let apiClient: PolarisAPIClient
+    private let authRepository: any AuthRepository
+
+    init(apiClient: PolarisAPIClient, authRepository: any AuthRepository) {
+        self.apiClient = apiClient
+        self.authRepository = authRepository
+    }
+
+    func fetchAlerts() async throws -> [AlertItem] {
+        let response: APIPageResponse<APIUserNotificationDTO> = try await authorizedGet(
+            "notifications",
+            queryItems: [URLQueryItem(name: "limit", value: "20")]
+        )
+        return response.items.map { $0.toAlertItem() }
+    }
+
+    func fetchAlertSubscriptions() async throws -> [AlertItem] {
+        let response: APINotificationSubscriptionsResponse = try await authorizedGet(
+            "notifications/subscriptions/me"
+        )
+        return response.items.map { $0.toAlertItem() }
+    }
+
+    func deleteAlert(id: String) async throws {
+        guard let numericAlertID = Int64(id) else {
+            throw PolarisAPIClientError.invalidURL
+        }
+
+        try await authorizedSend("notifications/\(numericAlertID)", method: .delete)
+    }
+
+    func setAlertSubscription(bookID: String, libraryID: String, isEnabled: Bool) async throws {
+        guard bookID.isEmpty == false,
+              let numericLibraryID = Int64(libraryID) else {
+            throw PolarisAPIClientError.invalidURL
+        }
+
+        if isEnabled {
+            try await authorizedSendJSON(
+                "notifications/subscriptions",
+                method: .post,
+                body: APIAlertSubscriptionRequest(isbn: bookID, libraryId: numericLibraryID)
+            )
+        } else {
+            try await authorizedSend(
+                "notifications/subscriptions",
+                method: .delete,
+                queryItems: [
+                    URLQueryItem(name: "isbn", value: bookID),
+                    URLQueryItem(name: "libraryId", value: String(numericLibraryID))
+                ]
+            )
+        }
+    }
+
+    private func authorizedGet<Response: Decodable>(
+        _ path: String,
+        queryItems: [URLQueryItem] = []
+    ) async throws -> Response {
+        let session = try await restoredSession()
+        do {
+            return try await apiClient.getOrThrow(path, queryItems: queryItems, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                return try await apiClient.getOrThrow(path, queryItems: queryItems, accessToken: refreshedSession.accessToken)
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func authorizedSend(_ path: String, method: HTTPMethod, queryItems: [URLQueryItem] = []) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendOrThrow(
+                path,
+                method: method,
+                queryItems: queryItems,
+                accessToken: session.accessToken
+            )
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendOrThrow(
+                    path,
+                    method: method,
+                    queryItems: queryItems,
+                    accessToken: refreshedSession.accessToken
+                )
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func authorizedSendJSON<Body: Encodable>(_ path: String, method: HTTPMethod, body: Body) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendJSONOrThrow(path, method: method, body: body, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendJSONOrThrow(
+                    path,
+                    method: method,
+                    body: body,
+                    accessToken: refreshedSession.accessToken
+                )
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func restoredSession() async throws -> AuthSession {
+        guard let session = await authRepository.restoreSession() else {
+            throw RepositoryError.unauthenticated
+        }
+        return session
+    }
+
+    private func refreshedSessionOrClear() async throws -> AuthSession {
+        do {
+            return try await authRepository.refresh()
+        } catch {
+            await authRepository.clearLocalSession()
+            throw error
+        }
+    }
+}
+
+struct LivePushNotificationRepository: PushNotificationRepository {
+    private let apiClient: PolarisAPIClient
+    private let authRepository: any AuthRepository
+
+    init(apiClient: PolarisAPIClient, authRepository: any AuthRepository) {
+        self.apiClient = apiClient
+        self.authRepository = authRepository
+    }
+
+    func registerDeviceToken(_ deviceToken: String) async throws {
+        guard deviceToken.isEmpty == false else {
+            throw PolarisAPIClientError.invalidURL
+        }
+        try await authorizedSendJSON(
+            "notifications/tokens",
+            method: .post,
+            body: APIPushTokenRequest(deviceToken: deviceToken)
+        )
+    }
+
+    func deleteDeviceToken(_ deviceToken: String) async throws {
+        guard deviceToken.isEmpty == false else {
+            throw PolarisAPIClientError.invalidURL
+        }
+        try await authorizedSend(
+            "notifications/tokens",
+            method: .delete,
+            queryItems: [
+                URLQueryItem(name: "platform", value: "IOS"),
+                URLQueryItem(name: "deviceToken", value: deviceToken)
+            ]
+        )
+    }
+
+    private func authorizedSend(_ path: String, method: HTTPMethod, queryItems: [URLQueryItem] = []) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendOrThrow(
+                path,
+                method: method,
+                queryItems: queryItems,
+                accessToken: session.accessToken
+            )
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendOrThrow(
+                    path,
+                    method: method,
+                    queryItems: queryItems,
+                    accessToken: refreshedSession.accessToken
+                )
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func authorizedSendJSON<Body: Encodable>(_ path: String, method: HTTPMethod, body: Body) async throws {
+        let session = try await restoredSession()
+        do {
+            try await apiClient.sendJSONOrThrow(path, method: method, body: body, accessToken: session.accessToken)
+        } catch PolarisAPIClientError.httpStatus(let statusCode) where [401, 403].contains(statusCode) {
+            let refreshedSession = try await refreshedSessionOrClear()
+            do {
+                try await apiClient.sendJSONOrThrow(
+                    path,
+                    method: method,
+                    body: body,
+                    accessToken: refreshedSession.accessToken
+                )
+            } catch PolarisAPIClientError.httpStatus(let retryStatusCode) where [401, 403].contains(retryStatusCode) {
+                await authRepository.clearLocalSession()
+                throw PolarisAPIClientError.httpStatus(retryStatusCode)
+            }
+        }
+    }
+
+    private func restoredSession() async throws -> AuthSession {
+        guard let session = await authRepository.restoreSession() else {
+            throw RepositoryError.unauthenticated
+        }
+        return session
+    }
+
+    private func refreshedSessionOrClear() async throws -> AuthSession {
+        do {
+            return try await authRepository.refresh()
+        } catch {
+            await authRepository.clearLocalSession()
+            throw error
+        }
+    }
+}
+
 struct LiveProfileRepository: ProfileRepository {
     private let apiClient: PolarisAPIClient
     private let authRepository: any AuthRepository
@@ -1177,9 +1702,37 @@ struct UnavailableFavoritesRepository: FavoritesRepository {
     }
 }
 
+struct UnavailableBookVoteRepository: BookVoteRepository {
+    func voteBook(id: String, voteType: BookVoteType) async throws {
+        throw RepositoryError.unavailable
+    }
+}
+
 struct UnavailableAlertsRepository: AlertsRepository {
-    func fetchAlerts() async -> [AlertItem] {
-        []
+    func fetchAlerts() async throws -> [AlertItem] {
+        throw RepositoryError.unavailable
+    }
+
+    func fetchAlertSubscriptions() async throws -> [AlertItem] {
+        throw RepositoryError.unavailable
+    }
+
+    func deleteAlert(id: String) async throws {
+        throw RepositoryError.unavailable
+    }
+
+    func setAlertSubscription(bookID: String, libraryID: String, isEnabled: Bool) async throws {
+        throw RepositoryError.unavailable
+    }
+}
+
+struct UnavailablePushNotificationRepository: PushNotificationRepository {
+    func registerDeviceToken(_ deviceToken: String) async throws {
+        throw RepositoryError.unavailable
+    }
+
+    func deleteDeviceToken(_ deviceToken: String) async throws {
+        throw RepositoryError.unavailable
     }
 }
 
@@ -1191,9 +1744,9 @@ struct UnavailableProfileRepository: ProfileRepository {
 
 private enum MockFixture {
     static let books: [BookSummary] = [
-        BookSummary(id: "book-arond-1", title: "아몬드", author: "손원평", publisher: "창비", year: "2024", coverImageURL: nil, isFavorite: true, isAlertEnabled: true, loanStatus: .borrowed),
-        BookSummary(id: "book-arond-2", title: "아몬드", author: "홍길동", publisher: "개발출판사", year: "2024", coverImageURL: nil, isFavorite: true, isAlertEnabled: false, loanStatus: .borrowed),
-        BookSummary(id: "book-arond-3", title: "아몬드", author: "홍길동", publisher: "개발출판사", year: "2024", coverImageURL: nil, isFavorite: false, isAlertEnabled: false, loanStatus: nil)
+        BookSummary(id: "book-arond-1", title: "아몬드", author: "손원평", publisher: "창비", year: "2024", coverImageURL: nil, isFavorite: true, isAlertEnabled: true, loanStatus: .borrowed, voteSummary: BookVoteSummary(recommendCount: 24, notRecommendCount: 0, myVote: .recommend)),
+        BookSummary(id: "book-arond-2", title: "아몬드", author: "홍길동", publisher: "개발출판사", year: "2024", coverImageURL: nil, isFavorite: true, isAlertEnabled: false, loanStatus: .borrowed, voteSummary: BookVoteSummary(recommendCount: 18, notRecommendCount: 0, myVote: nil)),
+        BookSummary(id: "book-arond-3", title: "아몬드", author: "홍길동", publisher: "개발출판사", year: "2024", coverImageURL: nil, isFavorite: false, isAlertEnabled: false, loanStatus: nil, voteSummary: BookVoteSummary(recommendCount: 9, notRecommendCount: 0, myVote: nil))
     ]
 
     static let libraries: [LibrarySummary] = [
@@ -1220,14 +1773,37 @@ private enum MockFixture {
         AlertItem(
             id: "alert-1",
             section: .available,
-            book: BookSummary(id: "alert-book-1", title: "아몬드", author: "김철수", publisher: "인사이트", year: "2024", coverImageURL: nil, isFavorite: true, isAlertEnabled: true, loanStatus: .available),
-            libraryName: "강남 도서관"
+            book: BookSummary(id: "alert-book-1", title: "아몬드", author: "손원평", publisher: "창비", year: "2017", coverImageURL: bookCoverURLFromISBN("9788936434267"), isFavorite: true, isAlertEnabled: true, loanStatus: .available, voteSummary: .empty),
+            libraryID: "library-gangnam",
+            libraryName: "강남 도서관",
+            message: "알림 받기 한 도서가 강남 도서관에서 대출 가능합니다.",
+            createdAt: "2026-05-07T09:00:01"
         ),
         AlertItem(
             id: "alert-2",
+            section: .available,
+            book: BookSummary(id: "alert-book-2", title: "불편한 편의점", author: "김호연", publisher: "나무옆의자", year: "2021", coverImageURL: bookCoverURLFromISBN("9791161571188"), isFavorite: true, isAlertEnabled: true, loanStatus: .available, voteSummary: .empty),
+            libraryID: "library-gumi-central",
+            libraryName: "구미시립중앙도서관",
+            message: "알림 받기 한 도서가 구미시립중앙도서관에서 대출 가능합니다.",
+            createdAt: "2026-05-07T09:12:34"
+        )
+    ]
+
+    static let alertSubscriptions: [AlertItem] = [
+        AlertItem(
+            id: "subscription-1",
             section: .waiting,
-            book: BookSummary(id: "alert-book-2", title: "아몬드", author: "김철수", publisher: "인사이트", year: "2024", coverImageURL: nil, isFavorite: false, isAlertEnabled: true, loanStatus: .notificationReady),
-            libraryName: "역삼도서관"
+            book: BookSummary(id: "subscription-book-1", title: "소년이 온다", author: "한강", publisher: "창비", year: "2014", coverImageURL: bookCoverURLFromISBN("9788936434120"), isFavorite: true, isAlertEnabled: true, loanStatus: .notificationReady, voteSummary: .empty),
+            libraryID: "library-geumo",
+            libraryName: "금오도서관"
+        ),
+        AlertItem(
+            id: "subscription-2",
+            section: .waiting,
+            book: BookSummary(id: "subscription-book-2", title: "달러구트 꿈 백화점", author: "이미예", publisher: "팩토리나인", year: "2020", coverImageURL: bookCoverURLFromISBN("9791165341909"), isFavorite: false, isAlertEnabled: true, loanStatus: .notificationReady, voteSummary: .empty),
+            libraryID: "library-daechi",
+            libraryName: "대치 도서관"
         )
     ]
 
@@ -1286,7 +1862,8 @@ private enum MockFixture {
         year: "2024",
         coverImageURL: nil,
         summary: "면접 준비생과 취업 준비생을 위한 실전 면접 가이드. 실제 면접 사례와 합격 노하우를 담아 인성 면접부터 실무 면접까지 한 권으로 정리한 목업 설명입니다.",
-        isFavorite: true
+        isFavorite: true,
+        voteSummary: BookVoteSummary(recommendCount: 18, notRecommendCount: 0, myVote: nil)
     )
 
     static let profile = UserProfile(
@@ -1323,7 +1900,8 @@ struct MockBookRepository: BookRepository {
             year: "2024",
             coverImageURL: nil,
             summary: MockFixture.bookDetail.summary,
-            isFavorite: false
+            isFavorite: false,
+            voteSummary: .empty
         )
     }
 }
@@ -1395,9 +1973,32 @@ struct MockFavoritesRepository: FavoritesRepository {
     }
 }
 
+struct MockBookVoteRepository: BookVoteRepository {
+    func voteBook(id: String, voteType: BookVoteType) async throws {
+    }
+}
+
 struct MockAlertsRepository: AlertsRepository {
-    func fetchAlerts() async -> [AlertItem] {
+    func fetchAlerts() async throws -> [AlertItem] {
         MockFixture.alerts
+    }
+
+    func fetchAlertSubscriptions() async throws -> [AlertItem] {
+        MockFixture.alertSubscriptions
+    }
+
+    func deleteAlert(id: String) async throws {
+    }
+
+    func setAlertSubscription(bookID: String, libraryID: String, isEnabled: Bool) async throws {
+    }
+}
+
+struct MockPushNotificationRepository: PushNotificationRepository {
+    func registerDeviceToken(_ deviceToken: String) async throws {
+    }
+
+    func deleteDeviceToken(_ deviceToken: String) async throws {
     }
 }
 

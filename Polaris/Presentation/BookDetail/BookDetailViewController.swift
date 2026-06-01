@@ -37,6 +37,9 @@ final class BookDetailViewController: UIViewController {
         contentView.favoriteButton.addAction(UIAction { [weak self] _ in
             Task { await self?.viewModel.didTapFavorite() }
         }, for: .touchUpInside)
+        contentView.recommendButton.addAction(UIAction { [weak self] _ in
+            Task { await self?.viewModel.didTapVote(.recommend) }
+        }, for: .touchUpInside)
 
         viewModel.onStateChange = { [weak self] state in
             self?.render(state)
@@ -52,6 +55,8 @@ final class BookDetailViewController: UIViewController {
         contentView.summaryLabel.text = detail.summary
         contentView.updateFavoriteButton(isFavorite: state.isFavorite, isLoading: state.isMutatingFavorite)
         contentView.updateFavoriteErrorMessage(state.errorMessage)
+        contentView.updateVote(summary: state.voteSummary, isLoading: state.isMutatingVote)
+        contentView.updateVoteErrorMessage(state.voteErrorMessage)
     }
 }
 
@@ -61,8 +66,14 @@ private final class BookDetailView: UIView {
     let authorLabel = UILabel()
     let publisherLabel = UILabel()
     let favoriteButton = UIButton(type: .system)
+    let recommendButton = UIButton(type: .system)
     let summaryLabel = UILabel()
     private let favoriteErrorLabel = UILabel()
+    private let voteSectionStack = UIStackView()
+    private let voteTitleLabel = UILabel()
+    private let voteStatusView = BookRecommendationStatusView()
+    private let voteHelpLabel = UILabel()
+    private let voteErrorLabel = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -89,6 +100,34 @@ private final class BookDetailView: UIView {
         favoriteErrorLabel.numberOfLines = 2
         favoriteErrorLabel.isHidden = true
 
+        voteTitleLabel.text = "독자 추천 현황"
+        voteTitleLabel.font = AppTypography.headline
+        voteTitleLabel.textColor = AppColor.textPrimary
+
+        voteSectionStack.axis = .vertical
+        voteSectionStack.alignment = .fill
+        voteSectionStack.distribution = .fill
+        voteSectionStack.spacing = AppSpacing.m
+        voteSectionStack.addArrangedSubview(voteTitleLabel)
+        voteSectionStack.setCustomSpacing(AppSpacing.m, after: voteTitleLabel)
+        voteSectionStack.addArrangedSubview(voteStatusView)
+        voteSectionStack.addArrangedSubview(recommendButton)
+        voteSectionStack.addArrangedSubview(voteHelpLabel)
+        voteSectionStack.addArrangedSubview(voteErrorLabel)
+
+        recommendButton.layer.cornerCurve = .continuous
+        recommendButton.accessibilityIdentifier = "bookDetail.recommendButton"
+
+        voteHelpLabel.text = "이 책을 추천한다면 추천을 눌러주세요."
+        voteHelpLabel.font = AppTypography.caption
+        voteHelpLabel.textColor = AppColor.textSecondary
+        voteHelpLabel.numberOfLines = 0
+
+        voteErrorLabel.font = AppTypography.caption
+        voteErrorLabel.textColor = AppColor.danger
+        voteErrorLabel.numberOfLines = 2
+        voteErrorLabel.isHidden = true
+
         summaryTitle.text = "책 소개"
         summaryTitle.font = AppTypography.section
         summaryTitle.textColor = AppColor.textPrimary
@@ -114,8 +153,24 @@ private final class BookDetailView: UIView {
         contentContainer.addSubviews(metaCard, summaryTitle, summaryLabel)
         [metaCard, summaryTitle, summaryLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
-        metaCard.addSubviews(coverView, titleLabel, authorLabel, publisherLabel, favoriteButton, favoriteErrorLabel)
-        [coverView, titleLabel, authorLabel, publisherLabel, favoriteButton, favoriteErrorLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        metaCard.addSubviews(
+            coverView,
+            titleLabel,
+            authorLabel,
+            publisherLabel,
+            favoriteButton,
+            favoriteErrorLabel,
+            voteSectionStack
+        )
+        [
+            coverView,
+            titleLabel,
+            authorLabel,
+            publisherLabel,
+            favoriteButton,
+            favoriteErrorLabel,
+            voteSectionStack
+        ].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
         let favoriteButtonTopConstraint = favoriteButton.topAnchor.constraint(equalTo: coverView.bottomAnchor, constant: AppSpacing.l)
         favoriteButtonTopConstraint.priority = .defaultHigh
@@ -151,7 +206,13 @@ private final class BookDetailView: UIView {
             favoriteErrorLabel.topAnchor.constraint(equalTo: favoriteButton.bottomAnchor, constant: AppSpacing.s),
             favoriteErrorLabel.leadingAnchor.constraint(equalTo: favoriteButton.leadingAnchor),
             favoriteErrorLabel.trailingAnchor.constraint(equalTo: favoriteButton.trailingAnchor),
-            favoriteErrorLabel.bottomAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: -AppSpacing.l),
+
+            voteSectionStack.topAnchor.constraint(equalTo: favoriteErrorLabel.bottomAnchor, constant: AppSpacing.xl),
+            voteSectionStack.leadingAnchor.constraint(equalTo: favoriteButton.leadingAnchor),
+            voteSectionStack.trailingAnchor.constraint(equalTo: favoriteButton.trailingAnchor),
+            voteSectionStack.bottomAnchor.constraint(equalTo: metaCard.bottomAnchor, constant: -AppSpacing.l),
+            voteStatusView.heightAnchor.constraint(equalToConstant: 34),
+            recommendButton.heightAnchor.constraint(equalToConstant: 46),
 
             metaCard.bottomAnchor.constraint(greaterThanOrEqualTo: coverView.bottomAnchor, constant: AppSpacing.l),
 
@@ -189,6 +250,80 @@ private final class BookDetailView: UIView {
         favoriteErrorLabel.text = message
         favoriteErrorLabel.isHidden = message == nil
     }
+
+    func updateVote(summary: BookVoteSummary, isLoading: Bool) {
+        let isRecommended = summary.myVote == .recommend
+        voteStatusView.update(recommendCount: summary.recommendCount)
+        updateRecommendButton(isSelected: isRecommended, isLoading: isLoading)
+        voteHelpLabel.isHidden = isRecommended
+    }
+
+    func updateVoteErrorMessage(_ message: String?) {
+        voteErrorLabel.text = message
+        voteErrorLabel.isHidden = message == nil
+    }
+
+    private func updateRecommendButton(isSelected: Bool, isLoading: Bool) {
+        var configuration = UIButton.Configuration.plain()
+        var title = AttributedString(isSelected ? "추천 완료" : "추천하기")
+        title.font = AppTypography.subheadline
+        configuration.cornerStyle = .capsule
+        configuration.baseForegroundColor = isSelected ? AppColor.accent : AppColor.textSecondary
+        configuration.image = UIImage(systemName: isSelected ? "hand.thumbsup.fill" : "hand.thumbsup")
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        configuration.imagePadding = AppSpacing.s
+        configuration.attributedTitle = title
+        configuration.contentInsets = .init(top: 10, leading: 16, bottom: 10, trailing: 16)
+        configuration.background.backgroundColor = isSelected ? AppColor.accentSurface : AppColor.surface
+        configuration.background.strokeColor = isSelected ? AppColor.accent.withAlphaComponent(0.28) : AppColor.line
+        configuration.background.strokeWidth = 1
+
+        UIView.performWithoutAnimation {
+            recommendButton.configuration = configuration
+            recommendButton.layoutIfNeeded()
+        }
+        recommendButton.isEnabled = isLoading == false
+        recommendButton.alpha = isLoading ? 0.6 : 1
+        recommendButton.accessibilityLabel = isSelected ? "추천 완료" : "추천하기"
+        recommendButton.accessibilityTraits = isSelected ? [.button, .selected] : [.button]
+    }
+}
+
+private final class BookRecommendationStatusView: UIView {
+    private let statusLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isAccessibilityElement = true
+        accessibilityIdentifier = "bookDetail.recommendationStatus"
+
+        layer.cornerRadius = 17
+        layer.cornerCurve = .continuous
+        clipsToBounds = true
+
+        statusLabel.font = AppTypography.subheadline
+        statusLabel.textAlignment = .center
+        statusLabel.textColor = AppColor.textPrimary
+
+        addSubview(statusLabel)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.pinEdges(to: self, insets: UIEdgeInsets(top: 0, left: AppSpacing.l, bottom: 0, right: AppSpacing.l))
+        update(recommendCount: 0)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(recommendCount: Int) {
+        let hasRecommendation = recommendCount > 0
+        backgroundColor = hasRecommendation ? AppColor.accent : AppColor.elevated
+        layer.borderWidth = hasRecommendation ? 0 : 1
+        layer.borderColor = AppColor.lineStrong.cgColor
+        statusLabel.text = hasRecommendation ? "\(recommendCount)명이 추천했어요" : "아직 추천한 사람이 없어요"
+        statusLabel.textColor = hasRecommendation ? .white : AppColor.textPrimary
+        accessibilityLabel = statusLabel.text
+    }
 }
 
 #if DEBUG && canImport(SwiftUI)
@@ -199,7 +334,8 @@ private final class BookDetailView: UIView {
         viewModel: BookDetailViewModel(
             bookID: "book-arond-2",
             bookRepository: dependencies.bookRepository,
-            favoritesRepository: dependencies.favoritesRepository
+            favoritesRepository: dependencies.favoritesRepository,
+            bookVoteRepository: dependencies.bookVoteRepository
         )
     )
 }

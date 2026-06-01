@@ -11,6 +11,7 @@ import Foundation
 final class AlarmViewModel {
     struct State: Equatable {
         var sections: [AlertSection: [AlertBookItemViewData]] = [:]
+        var errorMessage: String?
     }
 
     var onStateChange: ((State) -> Void)?
@@ -24,19 +25,26 @@ final class AlarmViewModel {
     }
 
     func load() async {
-        let alerts = await alertsRepository.fetchAlerts()
-        state.sections = Dictionary(grouping: alerts, by: \.section).mapValues { items in
-            items.map { item in
-                AlertBookItemViewData(
-                    id: item.id,
-                    bookID: item.book.id,
-                    title: item.book.title,
-                    metadataText: "\(item.book.author) · \(item.book.publisher)",
-                    libraryName: item.libraryName,
-                    badges: item.book.loanStatus.map { [makeLoanBadge($0)] } ?? [],
-                    isAlertEnabled: item.book.isAlertEnabled
-                )
+        do {
+            async let alerts = alertsRepository.fetchAlerts()
+            async let subscriptions = alertsRepository.fetchAlertSubscriptions()
+
+            let fetchedAlerts = try await alerts
+            let fetchedSubscriptions = try await subscriptions
+            let availableItems = fetchedAlerts.map(makeAvailableAlertViewData)
+            let subscriptionItems = fetchedSubscriptions.map(makeSubscriptionViewData)
+            var sections: [AlertSection: [AlertBookItemViewData]] = [:]
+            if availableItems.isEmpty == false {
+                sections[.available] = availableItems
             }
+            if subscriptionItems.isEmpty == false {
+                sections[.waiting] = subscriptionItems
+            }
+            state.sections = sections
+            state.errorMessage = nil
+        } catch {
+            state.sections = [:]
+            state.errorMessage = "알림 목록을 불러오지 못했습니다."
         }
         onStateChange?(state)
     }
@@ -49,21 +57,74 @@ final class AlarmViewModel {
         onRoute?(.bookDetail(id: id))
     }
 
-    func didToggleAlert(id: String) {
+    func didDeleteAlert(id: String) async {
+        await didTapAction(id: id)
+    }
+
+    func didTapAction(id: String) async {
         for section in AlertSection.allCases {
-            guard let index = state.sections[section]?.firstIndex(where: { $0.id == id }) else { continue }
-            guard let item = state.sections[section]?[index] else { continue }
-            state.sections[section]?[index] = AlertBookItemViewData(
-                id: item.id,
-                bookID: item.bookID,
-                title: item.title,
-                metadataText: item.metadataText,
-                libraryName: item.libraryName,
-                badges: item.badges,
-                isAlertEnabled: item.isAlertEnabled == false
-            )
+            guard let item = state.sections[section]?.first(where: { $0.id == id }) else { continue }
+            let previousSections = state.sections
+            removeItem(id: id, from: section)
+            state.errorMessage = nil
             onStateChange?(state)
+
+            do {
+                switch item.action {
+                case .delete:
+                    try await alertsRepository.deleteAlert(id: item.id)
+                case .unsubscribe:
+                    try await alertsRepository.setAlertSubscription(
+                        bookID: item.bookID,
+                        libraryID: item.libraryID,
+                        isEnabled: false
+                    )
+                }
+            } catch {
+                state.sections = previousSections
+                state.errorMessage = item.action == .delete ? "알림을 삭제하지 못했습니다." : "알림 신청을 해제하지 못했습니다."
+                onStateChange?(state)
+            }
             return
         }
+    }
+
+    private func removeItem(id: String, from section: AlertSection) {
+        state.sections[section]?.removeAll { $0.id == id }
+        if state.sections[section]?.isEmpty == true {
+            state.sections[section] = nil
+        }
+    }
+
+    private func makeAvailableAlertViewData(_ item: AlertItem) -> AlertBookItemViewData {
+        AlertBookItemViewData(
+            id: item.id,
+            bookID: item.book.id,
+            libraryID: item.libraryID,
+            title: item.book.title,
+            metadataText: "\(item.libraryName)에서 대출가능 상태로 바뀌었습니다.",
+            coverImageURL: item.book.coverImageURL,
+            libraryName: item.libraryName,
+            messageText: "",
+            badges: [makeLoanBadge(.available)],
+            isAlertEnabled: item.book.isAlertEnabled,
+            action: .delete
+        )
+    }
+
+    private func makeSubscriptionViewData(_ item: AlertItem) -> AlertBookItemViewData {
+        AlertBookItemViewData(
+            id: item.id,
+            bookID: item.book.id,
+            libraryID: item.libraryID,
+            title: item.book.title,
+            metadataText: "\(item.libraryName)에서 알림 신청 중입니다.",
+            coverImageURL: item.book.coverImageURL,
+            libraryName: item.libraryName,
+            messageText: "대출가능 상태가 되면 알림으로 알려드릴게요.",
+            badges: [BadgeContent(title: "알림 신청중", tone: .blue)],
+            isAlertEnabled: true,
+            action: .unsubscribe
+        )
     }
 }

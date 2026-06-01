@@ -160,9 +160,6 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate, Lo
     private func makeHomeDataSource() -> UICollectionViewDiffableDataSource<Int, LibraryCardItemViewData> {
         let registration = UICollectionView.CellRegistration<LibraryCardCell, LibraryCardItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
-            cell.onBellTap = {
-                // Alerts API is not available yet.
-            }
             cell.onHeartTap = { [weak self] in
                 Task { await self?.viewModel.didToggleFavorite(id: item.id) }
             }
@@ -190,7 +187,7 @@ final class HomeViewController: BaseViewController, UICollectionViewDelegate, Lo
         let registration = UICollectionView.CellRegistration<LibraryCardCell, LibraryCardItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
             cell.onBellTap = { [weak self] in
-                self?.searchViewModel.didToggleLibraryAlert(id: item.id)
+                Task { await self?.searchViewModel.didToggleLibraryAlert(id: item.id) }
             }
             cell.onHeartTap = { [weak self] in
                 Task { await self?.searchViewModel.didToggleLibraryFavorite(id: item.id) }

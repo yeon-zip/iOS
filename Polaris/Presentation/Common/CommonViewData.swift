@@ -97,33 +97,50 @@ struct FavoriteBookItemViewData: Identifiable, Hashable, Sendable {
     }
 }
 
+enum AlertBookAction: Hashable, Sendable {
+    case delete
+    case unsubscribe
+}
+
 struct AlertBookItemViewData: Identifiable, Hashable, Sendable {
     let id: String
     let bookID: String
+    let libraryID: String
     let title: String
     let metadataText: String
+    let coverImageURL: URL?
     let libraryName: String
+    let messageText: String
     let badges: [BadgeContent]
     let isAlertEnabled: Bool
+    let action: AlertBookAction
 
     static func == (lhs: AlertBookItemViewData, rhs: AlertBookItemViewData) -> Bool {
         lhs.id == rhs.id &&
         lhs.bookID == rhs.bookID &&
+        lhs.libraryID == rhs.libraryID &&
         lhs.title == rhs.title &&
         lhs.metadataText == rhs.metadataText &&
+        lhs.coverImageURL == rhs.coverImageURL &&
         lhs.libraryName == rhs.libraryName &&
+        lhs.messageText == rhs.messageText &&
         lhs.badges == rhs.badges &&
-        lhs.isAlertEnabled == rhs.isAlertEnabled
+        lhs.isAlertEnabled == rhs.isAlertEnabled &&
+        lhs.action == rhs.action
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(bookID)
+        hasher.combine(libraryID)
         hasher.combine(title)
         hasher.combine(metadataText)
+        hasher.combine(coverImageURL)
         hasher.combine(libraryName)
+        hasher.combine(messageText)
         hasher.combine(badges)
         hasher.combine(isAlertEnabled)
+        hasher.combine(action)
     }
 }
 
