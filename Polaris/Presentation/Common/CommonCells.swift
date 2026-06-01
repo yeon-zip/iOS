@@ -239,6 +239,7 @@ final class LibraryCardCell: UICollectionViewCell {
         actionsStack.axis = .horizontal
         actionsStack.spacing = 2
         actionsStack.alignment = .center
+        actionsStack.isUserInteractionEnabled = true
         actionsStack.addArrangedSubview(bellButton)
         actionsStack.addArrangedSubview(heartButton)
 
@@ -266,6 +267,8 @@ final class LibraryCardCell: UICollectionViewCell {
             self?.onHeartTap?()
         }, for: .touchUpInside)
         accessibilityIdentifier = "libraryCardCell"
+        heartButton.accessibilityIdentifier = "libraryCardCell.favoriteButton"
+        bellButton.accessibilityIdentifier = "libraryCardCell.alertButton"
     }
 
     required init?(coder: NSCoder) {
@@ -331,6 +334,7 @@ class BookInfoCardCell: UICollectionViewCell {
         actionsStack.axis = .horizontal
         actionsStack.spacing = 2
         actionsStack.alignment = .center
+        actionsStack.isUserInteractionEnabled = true
 
         containerView.addSubviews(titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack)
         [titleLabel, subtitleLabel, supportingLabel, badgeStack, actionsStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
