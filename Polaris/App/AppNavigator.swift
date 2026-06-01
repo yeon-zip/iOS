@@ -210,12 +210,6 @@ final class AppNavigator {
     }
 
     private var defaultSearchLocation: AddressSuggestion {
-        AddressSuggestion(
-            id: "home-default-location",
-            roadAddress: "경상북도 구미시 대학로 61",
-            detailText: "기본 위치",
-            latitude: 36.1450,
-            longitude: 128.3937
-        )
+        AddressSuggestion.defaultLocation
     }
 }

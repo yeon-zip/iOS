@@ -380,16 +380,19 @@ struct PolarisTests {
         #expect(viewModel.state.libraries.count == 2)
         #expect(viewModel.state.selectedBookID == nil)
 
-        await viewModel.didSelectBook(id: "book-arond-2").value
-        #expect(viewModel.state.selectedBookID == "book-arond-2")
-        #expect(viewModel.state.books.first(where: { $0.id == "book-arond-2" })?.isSelected == true)
-        #expect(viewModel.state.libraries.count == 1)
+        await viewModel.didSelectBook(id: "book-arond-1").value
+        #expect(viewModel.state.selectedBookID == "book-arond-1")
+        #expect(viewModel.state.books.first(where: { $0.id == "book-arond-1" })?.isSelected == true)
+        #expect(viewModel.state.libraries.count == 2)
 
         await viewModel.didToggleExcludeUnavailable(true).value
         #expect(viewModel.state.libraries.count == 1)
+        #expect(viewModel.state.libraries.allSatisfy { library in
+            library.badges.contains(where: { $0.title == "대출 가능" })
+        })
 
         await viewModel.didSelectDistance(.tenKm).value
-        #expect(viewModel.state.libraries.count == 2)
+        #expect(viewModel.state.libraries.count == 1)
     }
 
     @Test func searchViewModelAutoSelectsFirstResultAndLoadsHoldingLibraries() async throws {

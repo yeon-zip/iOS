@@ -1946,7 +1946,7 @@ struct MockLibraryRepository: LibraryRepository {
         }
 
         if query.excludeUnavailable {
-            return filtered.filter { $0.loanStatus != .borrowed }
+            return filtered.filter { $0.loanStatus == .available }
         }
 
         return filtered

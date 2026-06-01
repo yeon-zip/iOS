@@ -10,13 +10,7 @@ import Foundation
 @MainActor
 final class HomeViewModel {
     struct State: Equatable {
-        var selectedLocation = AddressSuggestion(
-            id: "home-default-location",
-            roadAddress: "경상북도 구미시 대학로 61",
-            detailText: "기본 위치",
-            latitude: 36.1450,
-            longitude: 128.3937
-        )
+        var selectedLocation = AddressSuggestion.defaultLocation
         var selectedDistance: DistanceOption = .twoKm
         var excludeClosed = false
         var libraries: [LibraryCardItemViewData] = []

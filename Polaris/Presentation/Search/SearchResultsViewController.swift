@@ -182,7 +182,7 @@ private final class SearchResultsView: UIView {
     let booksCollectionView: UICollectionView
     let librariesCollectionView: ContentSizedCollectionView
     let distanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .twoKm)
-    let excludeToggle = InlineToggleView(title: "대출불가 제외")
+    let excludeToggle = InlineToggleView(title: "대출 가능만")
     private let booksLoadingView = LoadingOverlayView()
     private let librariesLoadingView = LoadingOverlayView()
     private let distanceHeader = SectionHeaderView(title: "검색 반경")
@@ -374,13 +374,7 @@ private final class SearchResultsView: UIView {
         viewModel: SearchResultsViewModel(
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
-            currentLocation: AddressSuggestion(
-                id: "preview-location",
-                roadAddress: "경상북도 구미시 대학로 61",
-                detailText: "기본 위치",
-                latitude: 36.1450,
-                longitude: 128.3937
-            ),
+            currentLocation: .defaultLocation,
             currentDistance: .twoKm
         ),
         navigator: navigator

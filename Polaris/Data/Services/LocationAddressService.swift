@@ -48,6 +48,9 @@ final class AppleLocationAddressService: NSObject, LocationAddressService {
     }
 
     func requestCurrentAddress() async throws -> AddressSuggestion {
+    #if targetEnvironment(simulator)
+        return .defaultLocation
+    #else
         guard CLLocationManager.locationServicesEnabled() else {
             throw LocationAddressError.servicesDisabled
         }
@@ -69,6 +72,7 @@ final class AppleLocationAddressService: NSObject, LocationAddressService {
             detailText: "현재 위치",
             coordinate: location.coordinate
         )
+    #endif
     }
 
     func resolveAddress(roadAddress: String, detailText: String) async throws -> AddressSuggestion {
