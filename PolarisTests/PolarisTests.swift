@@ -7,6 +7,7 @@
 
 import Foundation
 import Testing
+import UIKit
 @testable import Polaris
 
 private final class URLProtocolStub: URLProtocol, @unchecked Sendable {
@@ -154,6 +155,24 @@ private func makeTestLibrary(id: String, name: String) -> LibrarySummary {
     )
 }
 
+private func findSubview<View: UIView>(
+    in rootView: UIView,
+    ofType type: View.Type,
+    where predicate: (View) -> Bool
+) -> View? {
+    if let view = rootView as? View, predicate(view) {
+        return view
+    }
+
+    for subview in rootView.subviews {
+        if let match = findSubview(in: subview, ofType: type, where: predicate) {
+            return match
+        }
+    }
+
+    return nil
+}
+
 private struct FixedFavoritesRepository: FavoritesRepository {
     let books: [BookSummary]
     let libraries: [LibrarySummary]
@@ -177,6 +196,25 @@ private struct FixedFavoritesRepository: FavoritesRepository {
         if mutationResult == false {
             throw RepositoryError.unavailable
         }
+    }
+}
+
+private final class RecordingFavoritesRepository: FavoritesRepository {
+    private(set) var libraryMutations: [(id: String, isFavorite: Bool)] = []
+
+    func fetchFavoriteBooks() async throws -> [BookSummary] {
+        []
+    }
+
+    func fetchFavoriteLibraries() async throws -> [LibrarySummary] {
+        []
+    }
+
+    func setBookFavorite(id: String, isFavorite: Bool) async throws {
+    }
+
+    func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
+        libraryMutations.append((id, isFavorite))
     }
 }
 
@@ -490,6 +528,63 @@ struct PolarisTests {
         #expect(alertsRepository.mutations.first?.libraryID == "1")
         #expect(alertsRepository.mutations.first?.isEnabled == true)
         #expect(viewModel.state.libraries.first?.isBellActive == true)
+    }
+
+    @Test func searchViewModelTogglesLibraryFavorite() async throws {
+        let books = [makeTestBook(id: "book-1", title: "테스트 책 1")]
+        let libraryRepository = RecordingLibraryRepository(
+            responsesByBookID: [
+                "book-1": [makeTestLibrary(id: "1", name: "첫 번째 도서관")]
+            ]
+        )
+        let favoritesRepository = RecordingFavoritesRepository()
+        let viewModel = SearchResultsViewModel(
+            searchRepository: FixedSearchRepository(books: books),
+            libraryRepository: libraryRepository,
+            favoritesRepository: favoritesRepository,
+            currentLocation: AddressSuggestion.defaultLocation,
+            currentDistance: .twoKm
+        )
+
+        await viewModel.didSubmitQuery("테스트").value
+        #expect(viewModel.state.libraries.first?.isFavorite == false)
+
+        await viewModel.didToggleLibraryFavorite(id: "1")
+
+        #expect(favoritesRepository.libraryMutations.count == 1)
+        #expect(favoritesRepository.libraryMutations.first?.id == "1")
+        #expect(favoritesRepository.libraryMutations.first?.isFavorite == true)
+        #expect(viewModel.state.libraries.first?.isFavorite == true)
+    }
+
+    @MainActor
+    @Test func libraryCardFavoriteButtonCanReceiveTouches() async throws {
+        let cell = LibraryCardCell(frame: CGRect(x: 0, y: 0, width: 320, height: 120))
+        cell.configure(viewData: LibraryCardItemViewData(
+            id: "1",
+            title: "첫 번째 도서관",
+            distanceText: "1.0km",
+            badges: [makeOperatingBadge(.open)],
+            showsBell: false,
+            showsFavorite: true,
+            isBellActive: false,
+            isFavorite: false
+        ))
+
+        let favoriteButton = try #require(findSubview(
+            in: cell,
+            ofType: UIButton.self,
+            where: { $0.accessibilityIdentifier == "libraryCardCell.favoriteButton" }
+        ))
+        var didTapFavorite = false
+        cell.onHeartTap = {
+            didTapFavorite = true
+        }
+
+        #expect(favoriteButton.isHidden == false)
+        #expect(favoriteButton.superview?.isUserInteractionEnabled == true)
+        favoriteButton.sendActions(for: .touchUpInside)
+        #expect(didTapFavorite == true)
     }
 
     @Test func searchViewModelTracksLoadingStateWhileNearbyLibrariesAreFetching() async throws {

@@ -110,7 +110,7 @@ final class IconActionButton: UIButton {
     override var intrinsicContentSize: CGSize {
         switch style {
         case .plain:
-            return CGSize(width: 32, height: 32)
+            return CGSize(width: 44, height: 44)
         case .soft:
             return CGSize(width: 36, height: 36)
         }
@@ -156,8 +156,21 @@ final class IconActionButton: UIButton {
             configuration.background.cornerRadius = 18
         }
         self.configuration = configuration
-        accessibilityIdentifier = "iconActionButton.\(symbolName)"
+        if accessibilityIdentifier == nil || accessibilityIdentifier?.hasPrefix("iconActionButton.") == true {
+            accessibilityIdentifier = "iconActionButton.\(symbolName)"
+        }
         tintColor = foregroundColor
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        let minimumHitSize = CGSize(width: 44, height: 44)
+        let hitWidth = max(bounds.width, minimumHitSize.width)
+        let hitHeight = max(bounds.height, minimumHitSize.height)
+        let hitBounds = bounds.insetBy(
+            dx: min(0, (bounds.width - hitWidth) / 2),
+            dy: min(0, (bounds.height - hitHeight) / 2)
+        )
+        return hitBounds.contains(point)
     }
 }
 
