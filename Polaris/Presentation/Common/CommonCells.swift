@@ -391,6 +391,7 @@ class BookInfoCardCell: UICollectionViewCell {
 
 final class FavoriteBookCell: BookInfoCardCell {
     static let reuseIdentifier = "FavoriteBookCell"
+    static let preferredHeight: CGFloat = 112
     private let coverView = MockBookCoverView()
     private let detailButton = UIButton(type: .system)
     private let actionReserveView = UIView()
@@ -407,6 +408,8 @@ final class FavoriteBookCell: BookInfoCardCell {
         ]
         titleLabel.numberOfLines = 1
         titleLabel.lineBreakMode = .byTruncatingTail
+        subtitleLabel.numberOfLines = 1
+        subtitleLabel.lineBreakMode = .byTruncatingTail
         setTextContentLeadingInset(88)
 
         var detailConfiguration = UIButton.Configuration.tinted()
@@ -468,6 +471,12 @@ final class FavoriteBookCell: BookInfoCardCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func preferredLayoutAttributesFitting(_ layoutAttributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+        let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
+        attributes.size.height = Self.preferredHeight
+        return attributes
+    }
+
     override func prepareForReuse() {
         super.prepareForReuse()
         onDetailTap = nil
@@ -485,15 +494,43 @@ final class FavoriteBookCell: BookInfoCardCell {
 
 final class AlertBookCell: BookInfoCardCell {
     static let reuseIdentifier = "AlertBookCell"
-    private let bellButton = IconActionButton(symbolName: "bell", accessibilityLabel: "알림 토글")
+    static let preferredHeight: CGFloat = 112
+    private let coverView = MockBookCoverView()
+    private let actionButton = IconActionButton(symbolName: "trash", accessibilityLabel: "알림 삭제")
 
-    var onBellTap: (() -> Void)?
+    var onActionTap: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        actionsStack.addArrangedSubview(bellButton)
-        bellButton.addAction(UIAction { [weak self] _ in
-            self?.onBellTap?()
+        coverView.layer.maskedCorners = [
+            .layerMinXMinYCorner,
+            .layerMinXMaxYCorner
+        ]
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        subtitleLabel.numberOfLines = 1
+        subtitleLabel.lineBreakMode = .byTruncatingTail
+        supportingLabel.numberOfLines = 1
+        supportingLabel.lineBreakMode = .byTruncatingTail
+        setTextContentLeadingInset(88)
+
+        containerView.addSubview(coverView)
+        coverView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            coverView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            coverView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            coverView.widthAnchor.constraint(equalToConstant: 76),
+            coverView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+
+        actionsStack.addArrangedSubview(actionButton)
+        actionButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            actionButton.widthAnchor.constraint(equalToConstant: 32),
+            actionButton.heightAnchor.constraint(equalToConstant: 32)
+        ])
+        actionButton.addAction(UIAction { [weak self] _ in
+            self?.onActionTap?()
         }, for: .touchUpInside)
         accessibilityIdentifier = "alertBookCell"
     }
@@ -504,18 +541,32 @@ final class AlertBookCell: BookInfoCardCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        onBellTap = nil
+        onActionTap = nil
+    }
+
+    override func preferredLayoutAttributesFitting(_ layoutAttributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+        let attributes = super.preferredLayoutAttributesFitting(layoutAttributes)
+        attributes.size.height = Self.preferredHeight
+        return attributes
     }
 
     func configure(viewData: AlertBookItemViewData) {
         configure(
             title: viewData.title,
             subtitle: viewData.metadataText,
-            supportingText: "알림 도서관 · \(viewData.libraryName)",
+            supportingText: viewData.messageText.isEmpty ? nil : viewData.messageText,
             badges: viewData.badges
         )
-        bellButton.setSymbolName(viewData.isAlertEnabled ? "bell.fill" : "bell")
-        bellButton.accessibilityLabel = viewData.isAlertEnabled ? "알림 해제" : "알림 설정"
-        bellButton.setForegroundColor(viewData.isAlertEnabled ? AppColor.accent : AppColor.textTertiary)
+        coverView.configure(seed: viewData.bookID, imageURL: viewData.coverImageURL)
+        switch viewData.action {
+        case .delete:
+            actionButton.setSymbolName("trash")
+            actionButton.accessibilityLabel = "알림 삭제"
+            actionButton.setForegroundColor(AppColor.textTertiary)
+        case .unsubscribe:
+            actionButton.setSymbolName("bell.fill")
+            actionButton.accessibilityLabel = "알림 해제"
+            actionButton.setForegroundColor(AppColor.accent)
+        }
     }
 }

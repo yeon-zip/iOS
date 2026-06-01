@@ -25,6 +25,7 @@ final class SearchResultsViewModel {
     private let searchRepository: any SearchRepository
     private let libraryRepository: any LibraryRepository
     private let favoritesRepository: any FavoritesRepository
+    private let alertsRepository: any AlertsRepository
     private var currentLocation: AddressSuggestion
     private(set) var state: State
     private var refreshTask: Task<Void, Never>?
@@ -34,6 +35,7 @@ final class SearchResultsViewModel {
         searchRepository: any SearchRepository,
         libraryRepository: any LibraryRepository,
         favoritesRepository: any FavoritesRepository = UnavailableFavoritesRepository(),
+        alertsRepository: any AlertsRepository = UnavailableAlertsRepository(),
         currentLocation: AddressSuggestion,
         currentDistance: DistanceOption,
         initialQuery: String? = nil
@@ -41,6 +43,7 @@ final class SearchResultsViewModel {
         self.searchRepository = searchRepository
         self.libraryRepository = libraryRepository
         self.favoritesRepository = favoritesRepository
+        self.alertsRepository = alertsRepository
         self.currentLocation = currentLocation
         self.state = State(selectedDistance: currentDistance)
         self.state.query.text = initialQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -136,8 +139,29 @@ final class SearchResultsViewModel {
         }
     }
 
-    func didToggleLibraryAlert(id: String) {
-        // Alerts API is not available yet.
+    func didToggleLibraryAlert(id: String) async {
+        guard let selectedBookID = state.selectedBookID,
+              let index = state.libraries.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+
+        let item = state.libraries[index]
+        let previousLibraries = state.libraries
+        let nextAlertState = item.isBellActive == false
+
+        state.libraries[index] = item.withBellState(nextAlertState)
+        onStateChange?(state)
+
+        do {
+            try await alertsRepository.setAlertSubscription(
+                bookID: selectedBookID,
+                libraryID: id,
+                isEnabled: nextAlertState
+            )
+        } catch {
+            state.libraries = previousLibraries
+            onStateChange?(state)
+        }
     }
 
     private var currentRequest: SearchResultsRequest {
@@ -217,8 +241,14 @@ final class SearchResultsViewModel {
             selectedBookID: effectiveSelectedBookID
         )
         let favoriteLibraryIDs = await loadFavoriteLibraryIDs()
+        let alertLibraryIDs = await loadAlertLibraryIDs(bookID: effectiveSelectedBookID)
         guard Task.isCancelled == false, generation == refreshGeneration else { return }
-        applyLibraries(fetchedLibraries, favoriteLibraryIDs: favoriteLibraryIDs)
+        applyLibraries(
+            fetchedLibraries,
+            selectedBookID: effectiveSelectedBookID,
+            favoriteLibraryIDs: favoriteLibraryIDs,
+            alertLibraryIDs: alertLibraryIDs
+        )
     }
 
     private func refreshLibraries(request: SearchResultsRequest, generation: Int) async {
@@ -229,11 +259,22 @@ final class SearchResultsViewModel {
             selectedBookID: request.selectedBookID
         )
         let favoriteLibraryIDs = await loadFavoriteLibraryIDs()
+        let alertLibraryIDs = await loadAlertLibraryIDs(bookID: request.selectedBookID)
         guard Task.isCancelled == false, generation == refreshGeneration else { return }
-        applyLibraries(fetchedLibraries, favoriteLibraryIDs: favoriteLibraryIDs)
+        applyLibraries(
+            fetchedLibraries,
+            selectedBookID: request.selectedBookID,
+            favoriteLibraryIDs: favoriteLibraryIDs,
+            alertLibraryIDs: alertLibraryIDs
+        )
     }
 
-    private func applyLibraries(_ fetchedLibraries: [LibrarySummary], favoriteLibraryIDs: Set<String>) {
+    private func applyLibraries(
+        _ fetchedLibraries: [LibrarySummary],
+        selectedBookID: String?,
+        favoriteLibraryIDs: Set<String>,
+        alertLibraryIDs: Set<String>
+    ) {
         state.libraries = fetchedLibraries.map { library in
             var badges = [makeOperatingBadge(library.operatingStatus)]
             if let loanStatus = library.loanStatus {
@@ -244,9 +285,9 @@ final class SearchResultsViewModel {
                 title: library.name,
                 distanceText: library.distanceText,
                 badges: badges,
-                showsBell: true,
+                showsBell: selectedBookID != nil,
                 showsFavorite: true,
-                isBellActive: library.isAlertEnabled,
+                isBellActive: alertLibraryIDs.contains(library.id) || library.isAlertEnabled,
                 isFavorite: favoriteLibraryIDs.contains(library.id) || library.isFavorite
             )
         }
@@ -261,6 +302,16 @@ final class SearchResultsViewModel {
             return []
         }
     }
+
+    private func loadAlertLibraryIDs(bookID: String?) async -> Set<String> {
+        guard let bookID else { return [] }
+        do {
+            let alerts = try await alertsRepository.fetchAlertSubscriptions()
+            return Set(alerts.filter { $0.book.id == bookID }.map(\.libraryID))
+        } catch {
+            return []
+        }
+    }
 }
 
 private struct SearchResultsRequest: Equatable {
@@ -271,6 +322,19 @@ private struct SearchResultsRequest: Equatable {
 
 private extension LibraryCardItemViewData {
     func withFavoriteState(_ isFavorite: Bool) -> LibraryCardItemViewData {
+        LibraryCardItemViewData(
+            id: id,
+            title: title,
+            distanceText: distanceText,
+            badges: badges,
+            showsBell: showsBell,
+            showsFavorite: showsFavorite,
+            isBellActive: isBellActive,
+            isFavorite: isFavorite
+        )
+    }
+
+    func withBellState(_ isBellActive: Bool) -> LibraryCardItemViewData {
         LibraryCardItemViewData(
             id: id,
             title: title,

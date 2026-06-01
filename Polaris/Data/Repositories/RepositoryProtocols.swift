@@ -15,6 +15,10 @@ protocol BookRepository {
     func fetchBookDetail(id: String) async -> BookDetail?
 }
 
+protocol BookVoteRepository {
+    func voteBook(id: String, voteType: BookVoteType) async throws
+}
+
 protocol LibraryRepository {
     func fetchHomeLibraries(origin: AddressSuggestion, distance: DistanceOption, excludeClosed: Bool) async -> [LibrarySummary]
     func fetchNearbyLibraries(origin: AddressSuggestion, distance: DistanceOption, query: SearchQuery, selectedBookID: String?) async -> [LibrarySummary]
@@ -29,7 +33,15 @@ protocol FavoritesRepository {
 }
 
 protocol AlertsRepository {
-    func fetchAlerts() async -> [AlertItem]
+    func fetchAlerts() async throws -> [AlertItem]
+    func fetchAlertSubscriptions() async throws -> [AlertItem]
+    func deleteAlert(id: String) async throws
+    func setAlertSubscription(bookID: String, libraryID: String, isEnabled: Bool) async throws
+}
+
+protocol PushNotificationRepository {
+    func registerDeviceToken(_ deviceToken: String) async throws
+    func deleteDeviceToken(_ deviceToken: String) async throws
 }
 
 protocol ProfileRepository {

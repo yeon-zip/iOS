@@ -13,7 +13,10 @@ final class BookDetailViewModel {
         var detail: BookDetail?
         var isFavorite = false
         var isMutatingFavorite = false
+        var voteSummary = BookVoteSummary.empty
+        var isMutatingVote = false
         var errorMessage: String?
+        var voteErrorMessage: String?
     }
 
     var onStateChange: ((State) -> Void)?
@@ -21,16 +24,19 @@ final class BookDetailViewModel {
     private let bookID: String
     private let bookRepository: any BookRepository
     private let favoritesRepository: any FavoritesRepository
+    private let bookVoteRepository: any BookVoteRepository
     private(set) var state = State()
 
     init(
         bookID: String,
         bookRepository: any BookRepository,
-        favoritesRepository: any FavoritesRepository = UnavailableFavoritesRepository()
+        favoritesRepository: any FavoritesRepository = UnavailableFavoritesRepository(),
+        bookVoteRepository: any BookVoteRepository = UnavailableBookVoteRepository()
     ) {
         self.bookID = bookID
         self.bookRepository = bookRepository
         self.favoritesRepository = favoritesRepository
+        self.bookVoteRepository = bookVoteRepository
     }
 
     func load() async {
@@ -43,7 +49,9 @@ final class BookDetailViewModel {
         state.detail = detail
         let favoriteBookIDs = await loadFavoriteBookIDs()
         state.isFavorite = detail.isFavorite || favoriteBookIDs.contains(detail.id)
+        state.voteSummary = detail.voteSummary
         state.errorMessage = nil
+        state.voteErrorMessage = nil
         onStateChange?(state)
     }
 
@@ -65,6 +73,30 @@ final class BookDetailViewModel {
             state.isFavorite = previousFavoriteState
             state.isMutatingFavorite = false
             state.errorMessage = "책 찜 상태를 변경하지 못했습니다."
+            onStateChange?(state)
+        }
+    }
+
+    func didTapVote(_ voteType: BookVoteType) async {
+        guard let detail = state.detail, state.isMutatingVote == false else { return }
+
+        let previousVoteSummary = state.voteSummary
+        let nextVoteSummary = previousVoteSummary.applying(voteType)
+        guard nextVoteSummary != previousVoteSummary else { return }
+
+        state.voteSummary = nextVoteSummary
+        state.isMutatingVote = true
+        state.voteErrorMessage = nil
+        onStateChange?(state)
+
+        do {
+            try await bookVoteRepository.voteBook(id: detail.id, voteType: voteType)
+            state.isMutatingVote = false
+            onStateChange?(state)
+        } catch {
+            state.voteSummary = previousVoteSummary
+            state.isMutatingVote = false
+            state.voteErrorMessage = "도서 투표를 반영하지 못했습니다."
             onStateChange?(state)
         }
     }

@@ -131,7 +131,7 @@ final class SearchResultsViewController: BaseViewController, UICollectionViewDel
         let registration = UICollectionView.CellRegistration<LibraryCardCell, LibraryCardItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
             cell.onBellTap = { [weak self] in
-                self?.viewModel.didToggleLibraryAlert(id: item.id)
+                Task { await self?.viewModel.didToggleLibraryAlert(id: item.id) }
             }
             cell.onHeartTap = { [weak self] in
                 Task { await self?.viewModel.didToggleLibraryFavorite(id: item.id) }

@@ -30,9 +30,11 @@ enum AppEnvironment: String {
 struct AppDependencies {
     let searchRepository: any SearchRepository
     let bookRepository: any BookRepository
+    let bookVoteRepository: any BookVoteRepository
     let libraryRepository: any LibraryRepository
     let favoritesRepository: any FavoritesRepository
     let alertsRepository: any AlertsRepository
+    let pushNotificationRepository: any PushNotificationRepository
     let profileRepository: any ProfileRepository
     let authRepository: any AuthRepository
     let locationAddressService: any LocationAddressService
@@ -43,9 +45,11 @@ struct AppDependencies {
         return AppDependencies(
             searchRepository: LiveSearchRepository(apiClient: apiClient),
             bookRepository: LiveBookRepository(apiClient: apiClient),
+            bookVoteRepository: LiveBookVoteRepository(apiClient: apiClient, authRepository: authRepository),
             libraryRepository: LiveLibraryRepository(apiClient: apiClient),
             favoritesRepository: LiveFavoritesRepository(apiClient: apiClient, authRepository: authRepository),
-            alertsRepository: UnavailableAlertsRepository(),
+            alertsRepository: LiveAlertsRepository(apiClient: apiClient, authRepository: authRepository),
+            pushNotificationRepository: LivePushNotificationRepository(apiClient: apiClient, authRepository: authRepository),
             profileRepository: LiveProfileRepository(apiClient: apiClient, authRepository: authRepository),
             authRepository: authRepository,
             locationAddressService: AppleLocationAddressService()
@@ -55,11 +59,20 @@ struct AppDependencies {
     static let mock = AppDependencies(
         searchRepository: MockSearchRepository(),
         bookRepository: MockBookRepository(),
+        bookVoteRepository: MockBookVoteRepository(),
         libraryRepository: MockLibraryRepository(),
         favoritesRepository: MockFavoritesRepository(),
         alertsRepository: MockAlertsRepository(),
+        pushNotificationRepository: MockPushNotificationRepository(),
         profileRepository: MockProfileRepository(),
-        authRepository: MockAuthRepository(),
+        authRepository: MockAuthRepository(
+            session: AuthSession(
+                accessToken: "mock-access-token",
+                refreshToken: "mock-refresh-token",
+                expiresAt: Date().addingTimeInterval(600),
+                userId: 1
+            )
+        ),
         locationAddressService: AppleLocationAddressService()
     )
 

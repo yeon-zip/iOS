@@ -112,11 +112,16 @@ final class AppNavigator {
     }
 
     private func showHome(animated: Bool) {
-        navigationController.setViewControllers([makeHome()], animated: animated)
+        AppRuntime.shared.pushNotificationCoordinator.activate()
+        navigationController.setViewControllers([makeHome()], animated: canAnimateNavigationChange(animated))
     }
 
     private func showLogin(animated: Bool) {
-        navigationController.setViewControllers([makeLogin()], animated: animated)
+        navigationController.setViewControllers([makeLogin()], animated: canAnimateNavigationChange(animated))
+    }
+
+    private func canAnimateNavigationChange(_ requestedAnimation: Bool) -> Bool {
+        requestedAnimation && navigationController.view.window != nil
     }
 
     private func makeStartup() -> UIViewController {
@@ -134,6 +139,7 @@ final class AppNavigator {
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
             favoritesRepository: dependencies.favoritesRepository,
+            alertsRepository: dependencies.alertsRepository,
             currentLocation: homeViewModel.state.selectedLocation,
             currentDistance: homeViewModel.state.selectedDistance
         )
@@ -160,6 +166,7 @@ final class AppNavigator {
             searchRepository: dependencies.searchRepository,
             libraryRepository: dependencies.libraryRepository,
             favoritesRepository: dependencies.favoritesRepository,
+            alertsRepository: dependencies.alertsRepository,
             currentLocation: currentLocation,
             currentDistance: currentDistance,
             initialQuery: initialQuery
@@ -173,7 +180,7 @@ final class AppNavigator {
     }
 
     private func makeAlerts() -> AlarmViewController {
-        let viewModel = AlarmViewModel(alertsRepository: dependencies.alertsRepository)
+        let viewModel = AlarmViewModel(alertsRepository: MockAlertsRepository())
         return AlarmViewController(viewModel: viewModel, navigator: self)
     }
 
@@ -186,7 +193,8 @@ final class AppNavigator {
         let viewModel = BookDetailViewModel(
             bookID: id,
             bookRepository: dependencies.bookRepository,
-            favoritesRepository: dependencies.favoritesRepository
+            favoritesRepository: dependencies.favoritesRepository,
+            bookVoteRepository: dependencies.bookVoteRepository
         )
         return BookDetailViewController(viewModel: viewModel)
     }

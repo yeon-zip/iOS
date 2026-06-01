@@ -54,7 +54,10 @@ final class AlarmViewController: BaseViewController, UICollectionViewDelegate {
 
     private func render(_ state: AlarmViewModel.State) {
         contentView.collectionView.backgroundView = state.sections.isEmpty
-            ? EmptyStateView(title: "알림 API 미구현", message: "알림 API가 아직 제공되지 않았습니다.")
+            ? EmptyStateView(
+                title: state.errorMessage == nil ? "받은 알림이 없어요" : "알림을 불러오지 못했어요",
+                message: state.errorMessage ?? "대출 가능으로 바뀐 도서가 있으면 이곳에서 확인할 수 있어요."
+            )
             : nil
         var snapshot = NSDiffableDataSourceSnapshot<AlertSection, AlertBookItemViewData>()
         AlertSection.allCases.forEach { section in
@@ -69,8 +72,8 @@ final class AlarmViewController: BaseViewController, UICollectionViewDelegate {
     private func makeDataSource() -> UICollectionViewDiffableDataSource<AlertSection, AlertBookItemViewData> {
         let registration = UICollectionView.CellRegistration<AlertBookCell, AlertBookItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
-            cell.onBellTap = { [weak self] in
-                self?.viewModel.didToggleAlert(id: item.id)
+            cell.onActionTap = { [weak self] in
+                Task { await self?.viewModel.didTapAction(id: item.id) }
             }
         }
 
@@ -135,15 +138,15 @@ private final class AlarmRootView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(96)
+                heightDimension: .absolute(AlertBookCell.preferredHeight)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(96)
+                heightDimension: .absolute(AlertBookCell.preferredHeight)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = AppSpacing.s
-            section.contentInsets = .init(top: 0, leading: 0, bottom: AppSpacing.xxl, trailing: 0)
+            section.interGroupSpacing = AppSpacing.m
+            section.contentInsets = .init(top: AppSpacing.xs, leading: 0, bottom: AppSpacing.xxxl, trailing: 0)
             let header = NSCollectionLayoutBoundarySupplementaryItem(
                 layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(24)),
                 elementKind: UICollectionView.elementKindSectionHeader,

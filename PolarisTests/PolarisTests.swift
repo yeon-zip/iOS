@@ -79,6 +79,9 @@ private final class RecordingLibraryRepository: LibraryRepository {
     var shouldPauseNearbyFetch = false
     private var nearbyFetchContinuation: CheckedContinuation<Void, Never>?
     private let responsesByBookID: [String: [LibrarySummary]]
+    var isNearbyFetchPaused: Bool {
+        nearbyFetchContinuation != nil
+    }
 
     init(responsesByBookID: [String: [LibrarySummary]] = [:]) {
         self.responsesByBookID = responsesByBookID
@@ -118,7 +121,22 @@ private func makeTestBook(id: String, title: String) -> BookSummary {
         coverImageURL: nil,
         isFavorite: false,
         isAlertEnabled: false,
-        loanStatus: nil
+        loanStatus: nil,
+        voteSummary: .empty
+    )
+}
+
+private func makeTestBookDetail(id: String, voteSummary: BookVoteSummary = .empty) -> BookDetail {
+    BookDetail(
+        id: id,
+        title: "테스트 도서",
+        author: "테스트 저자",
+        publisher: "테스트 출판사",
+        year: "2026",
+        coverImageURL: nil,
+        summary: "테스트 설명",
+        isFavorite: false,
+        voteSummary: voteSummary
     )
 }
 
@@ -180,35 +198,133 @@ private struct FailingFavoritesRepository: FavoritesRepository {
     }
 }
 
+private struct FixedBookRepository: BookRepository {
+    let detail: BookDetail?
+
+    func fetchBookDetail(id: String) async -> BookDetail? {
+        detail
+    }
+}
+
+private final class RecordingBookVoteRepository: BookVoteRepository {
+    private(set) var votes: [(id: String, voteType: BookVoteType)] = []
+    var shouldFail = false
+
+    func voteBook(id: String, voteType: BookVoteType) async throws {
+        votes.append((id, voteType))
+        if shouldFail {
+            throw RepositoryError.unavailable
+        }
+    }
+}
+
+private final class RecordingAlertsRepository: AlertsRepository {
+    private let alerts: [AlertItem]
+    private let subscriptions: [AlertItem]
+    private(set) var mutations: [(bookID: String, libraryID: String, isEnabled: Bool)] = []
+    private(set) var deletedAlertIDs: [String] = []
+    var shouldFailMutation = false
+    var shouldFailDelete = false
+
+    init(alerts: [AlertItem] = [], subscriptions: [AlertItem] = []) {
+        self.alerts = alerts
+        self.subscriptions = subscriptions
+    }
+
+    func fetchAlerts() async throws -> [AlertItem] {
+        alerts
+    }
+
+    func fetchAlertSubscriptions() async throws -> [AlertItem] {
+        subscriptions
+    }
+
+    func deleteAlert(id: String) async throws {
+        deletedAlertIDs.append(id)
+        if shouldFailDelete {
+            throw RepositoryError.unavailable
+        }
+    }
+
+    func setAlertSubscription(bookID: String, libraryID: String, isEnabled: Bool) async throws {
+        mutations.append((bookID, libraryID, isEnabled))
+        if shouldFailMutation {
+            throw RepositoryError.unavailable
+        }
+    }
+}
+
 private final class RequestRecorder: @unchecked Sendable {
+    private struct RecordedRequest {
+        let request: URLRequest
+        let body: Data?
+    }
+
     private let lock = NSLock()
-    private var requests: [URLRequest] = []
+    private var requests: [RecordedRequest] = []
 
     var firstRequest: URLRequest? {
         lock.lock()
         defer { lock.unlock() }
-        return requests.first
+        return requests.first?.request
+    }
+
+    var recordedRequests: [URLRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.map(\.request)
     }
 
     var paths: [String] {
         lock.lock()
         defer { lock.unlock() }
-        return requests.compactMap { $0.url?.path }
+        return requests.compactMap { $0.request.url?.path }
     }
 
     var methods: [String] {
         lock.lock()
         defer { lock.unlock() }
-        return requests.compactMap(\.httpMethod)
+        return requests.compactMap { $0.request.httpMethod }
     }
 
     func record(_ request: URLRequest) {
+        let body = Self.bodyData(from: request)
         lock.lock()
         defer { lock.unlock() }
-        requests.append(request)
+        requests.append(RecordedRequest(request: request, body: body))
+    }
+
+    func bodyString(where predicate: (URLRequest) -> Bool) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let body = requests.first(where: { predicate($0.request) })?.body else { return nil }
+        return String(data: body, encoding: .utf8)
+    }
+
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else { return nil }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let readCount = stream.read(&buffer, maxLength: buffer.count)
+            if readCount > 0 {
+                data.append(buffer, count: readCount)
+            } else {
+                break
+            }
+        }
+        return data.isEmpty ? nil : data
     }
 }
 
+@Suite(.serialized)
 @MainActor
 struct PolarisTests {
     private static func authSession() -> AuthSession {
@@ -338,6 +454,41 @@ struct PolarisTests {
         #expect(viewModel.state.libraries.first?.title == "두 번째 도서관")
     }
 
+    @Test func searchViewModelTogglesAlertSubscriptionForSelectedBookAndLibrary() async throws {
+        let books = [makeTestBook(id: "book-1", title: "테스트 책 1")]
+        let libraryRepository = RecordingLibraryRepository(
+            responsesByBookID: [
+                "book-1": [makeTestLibrary(id: "1", name: "첫 번째 도서관")]
+            ]
+        )
+        let alertsRepository = RecordingAlertsRepository()
+        let viewModel = SearchResultsViewModel(
+            searchRepository: FixedSearchRepository(books: books),
+            libraryRepository: libraryRepository,
+            alertsRepository: alertsRepository,
+            currentLocation: AddressSuggestion(
+                id: "test-location",
+                roadAddress: "경상북도 구미시 대학로 61",
+                detailText: "기본 위치",
+                latitude: 36.1450,
+                longitude: 128.3937
+            ),
+            currentDistance: .twoKm
+        )
+
+        await viewModel.didSubmitQuery("테스트").value
+        #expect(viewModel.state.libraries.first?.showsBell == true)
+        #expect(viewModel.state.libraries.first?.isBellActive == false)
+
+        await viewModel.didToggleLibraryAlert(id: "1")
+
+        #expect(alertsRepository.mutations.count == 1)
+        #expect(alertsRepository.mutations.first?.bookID == "book-1")
+        #expect(alertsRepository.mutations.first?.libraryID == "1")
+        #expect(alertsRepository.mutations.first?.isEnabled == true)
+        #expect(viewModel.state.libraries.first?.isBellActive == true)
+    }
+
     @Test func searchViewModelTracksLoadingStateWhileNearbyLibrariesAreFetching() async throws {
         let books = [makeTestBook(id: "book-1", title: "테스트 책 1")]
         let libraryRepository = RecordingLibraryRepository(
@@ -370,6 +521,13 @@ struct PolarisTests {
         #expect(viewModel.state.isBooksLoading == false)
         #expect(viewModel.state.isLibrariesLoading == true)
 
+        for _ in 0..<200 where libraryRepository.isNearbyFetchPaused == false {
+            await Task.yield()
+        }
+        guard libraryRepository.isNearbyFetchPaused else {
+            Issue.record("Expected nearby library fetch to be paused before resuming it.")
+            return
+        }
         libraryRepository.resumeNearbyFetch()
         await task.value
 
@@ -663,7 +821,8 @@ struct PolarisTests {
             coverImageURL: nil,
             isFavorite: true,
             isAlertEnabled: false,
-            loanStatus: nil
+            loanStatus: nil,
+            voteSummary: .empty
         )
         let viewModel = LikeViewModel(
             favoritesRepository: FixedFavoritesRepository(
@@ -689,6 +848,50 @@ struct PolarisTests {
         #expect(viewModel.state.books.isEmpty)
         #expect(viewModel.state.libraries.isEmpty)
         #expect(viewModel.state.errorMessage == "찜 목록을 불러오지 못했습니다.")
+    }
+
+    @Test func bookDetailViewModelRecommendsOptimisticallyOnce() async throws {
+        let voteRepository = RecordingBookVoteRepository()
+        let detail = makeTestBookDetail(
+            id: "9791198363510",
+            voteSummary: BookVoteSummary(recommendCount: 2, notRecommendCount: 1, myVote: nil)
+        )
+        let viewModel = BookDetailViewModel(
+            bookID: detail.id,
+            bookRepository: FixedBookRepository(detail: detail),
+            favoritesRepository: FixedFavoritesRepository(books: [], libraries: [], mutationResult: true),
+            bookVoteRepository: voteRepository
+        )
+
+        await viewModel.load()
+        await viewModel.didTapVote(.recommend)
+        await viewModel.didTapVote(.recommend)
+
+        #expect(voteRepository.votes.map(\.voteType) == [.recommend])
+        #expect(viewModel.state.voteSummary.recommendCount == 3)
+        #expect(viewModel.state.voteSummary.notRecommendCount == 1)
+        #expect(viewModel.state.voteSummary.myVote == .recommend)
+        #expect(viewModel.state.isMutatingVote == false)
+    }
+
+    @Test func bookDetailViewModelRestoresVoteWhenMutationFails() async throws {
+        let voteRepository = RecordingBookVoteRepository()
+        voteRepository.shouldFail = true
+        let originalVoteSummary = BookVoteSummary(recommendCount: 4, notRecommendCount: 2, myVote: nil)
+        let viewModel = BookDetailViewModel(
+            bookID: "9791198363510",
+            bookRepository: FixedBookRepository(
+                detail: makeTestBookDetail(id: "9791198363510", voteSummary: originalVoteSummary)
+            ),
+            favoritesRepository: FixedFavoritesRepository(books: [], libraries: [], mutationResult: true),
+            bookVoteRepository: voteRepository
+        )
+
+        await viewModel.load()
+        await viewModel.didTapVote(.recommend)
+
+        #expect(viewModel.state.voteSummary == originalVoteSummary)
+        #expect(viewModel.state.voteErrorMessage == "도서 투표를 반영하지 못했습니다.")
     }
 
     @Test func liveProfileRepositoryDecodesCurrentUserWithBearerToken() async throws {
@@ -822,13 +1025,237 @@ struct PolarisTests {
         #expect(libraries.first?.distanceText == "경상북도 구미시 옥계북로 51")
     }
 
+    @Test func liveBookVoteRepositoryUsesVoteEndpointAndBody() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 204,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data())
+        }
+        let repository = LiveBookVoteRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        try await repository.voteBook(id: "9791198363510", voteType: .recommend)
+
+        let body = requestRecorder.bodyString { $0.httpMethod == "PUT" }
+        #expect(requestRecorder.paths.first?.hasSuffix("/books/9791198363510/vote") == true)
+        #expect(requestRecorder.methods.first == "PUT")
+        #expect(requestRecorder.firstRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer access-token")
+        #expect(requestRecorder.firstRequest?.value(forHTTPHeaderField: "Content-Type") == "application/json;charset=UTF-8")
+        #expect(body?.contains(#""voteType":"RECOMMEND""#) == true)
+    }
+
+    @Test func liveAlertsRepositoryUsesNotificationListAndDeleteEndpoints() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let responseJSON = """
+        {
+          "hasNext": false,
+          "nextCursor": null,
+          "items": [
+            {
+              "notificationId": 123,
+              "notificationType": "BOOK_AVAILABLE",
+              "isbn": "9791198363510",
+              "bookTitle": "아몬드",
+              "libraryId": 456,
+              "libraryName": "구미시립중앙도서관",
+              "title": "대출 가능 알림",
+              "message": "알림 받기 한 도서가 구미시립중앙도서관에서 대출 가능합니다.",
+              "notificationDate": "2026-05-07",
+              "createdAt": "2026-05-07T09:00:01"
+            }
+          ]
+        }
+        """
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let statusCode = request.httpMethod == "GET" ? 200 : 204
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, request.httpMethod == "GET" ? Data(responseJSON.utf8) : Data())
+        }
+        let repository = LiveAlertsRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        let alerts = try await repository.fetchAlerts()
+        try await repository.deleteAlert(id: "123")
+
+        let requests = requestRecorder.recordedRequests
+        let getURL = requests.first(where: { $0.httpMethod == "GET" })?.url
+        let getQueryItems = getURL.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        let getQuery = Dictionary(uniqueKeysWithValues: getQueryItems.map { ($0.name, $0.value ?? "") })
+
+        #expect(alerts.first?.id == "123")
+        #expect(alerts.first?.book.id == "9791198363510")
+        #expect(alerts.first?.book.title == "아몬드")
+        #expect(alerts.first?.book.coverImageURL?.absoluteString.contains("9791198363510") == true)
+        #expect(alerts.first?.libraryID == "456")
+        #expect(alerts.first?.libraryName == "구미시립중앙도서관")
+        #expect(alerts.first?.section == .available)
+        #expect(alerts.first?.message?.contains("대출 가능합니다") == true)
+        #expect(requestRecorder.paths.contains { $0.hasSuffix("/notifications") })
+        #expect(requestRecorder.paths.contains { $0.hasSuffix("/notifications/123") })
+        #expect(requestRecorder.methods == ["GET", "DELETE"])
+        #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer access-token" })
+        #expect(getQuery["limit"] == "20")
+    }
+
+    @Test func liveAlertsRepositoryUsesNotificationSubscriptionEndpoints() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let responseJSON = """
+        [
+          {
+            "subscriptionId": 123,
+            "isbn": "9791198363510",
+            "title": "아몬드",
+            "author": "손원평",
+            "coverImageUrl": "https://example.com/book.jpg",
+            "libraryId": 456,
+            "libraryName": "구미시립중앙도서관",
+            "lastStableAvailability": "AVAILABLE",
+            "lastCheckOutcome": "OK",
+            "lastCheckedAt": "2026-05-05T00:00:00Z",
+            "lastNotifiedAt": null
+          }
+        ]
+        """
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let statusCode = request.httpMethod == "GET" ? 200 : 204
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, request.httpMethod == "GET" ? Data(responseJSON.utf8) : Data())
+        }
+        let repository = LiveAlertsRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        let alerts = try await repository.fetchAlertSubscriptions()
+        try await repository.setAlertSubscription(bookID: "9791198363510", libraryID: "456", isEnabled: true)
+        try await repository.setAlertSubscription(bookID: "9791198363510", libraryID: "456", isEnabled: false)
+
+        let requests = requestRecorder.recordedRequests
+        let postBody = requestRecorder.bodyString { $0.httpMethod == "POST" }
+        let deleteURL = requests.first(where: { $0.httpMethod == "DELETE" })?.url
+        let deleteQueryItems = deleteURL.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        let deleteQuery = Dictionary(uniqueKeysWithValues: deleteQueryItems.map { ($0.name, $0.value ?? "") })
+
+        #expect(alerts.first?.id == "123")
+        #expect(alerts.first?.book.id == "9791198363510")
+        #expect(alerts.first?.libraryID == "456")
+        #expect(alerts.first?.section == .available)
+        #expect(requestRecorder.paths.contains { $0.hasSuffix("/notifications/subscriptions/me") })
+        #expect(requestRecorder.paths.filter { $0.hasSuffix("/notifications/subscriptions") }.count == 2)
+        #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer access-token" })
+        #expect(postBody?.contains(#""isbn":"9791198363510""#) == true)
+        #expect(postBody?.contains(#""libraryId":456"#) == true)
+        #expect(deleteQuery["isbn"] == "9791198363510")
+        #expect(deleteQuery["libraryId"] == "456")
+    }
+
+    @Test func livePushNotificationRepositoryRegistersAndDeletesIOSToken() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let session = makeStubbedSession { request in
+            requestRecorder.record(request)
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 204,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data())
+        }
+        let repository = LivePushNotificationRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        try await repository.registerDeviceToken("fcm-token")
+        try await repository.deleteDeviceToken("fcm-token")
+
+        let requests = requestRecorder.recordedRequests
+        let postBody = requestRecorder.bodyString { $0.httpMethod == "POST" }
+        let deleteURL = requests.first(where: { $0.httpMethod == "DELETE" })?.url
+        let deleteQueryItems = deleteURL.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        let deleteQuery = Dictionary(uniqueKeysWithValues: deleteQueryItems.map { ($0.name, $0.value ?? "") })
+
+        #expect(requestRecorder.paths.allSatisfy { $0.hasSuffix("/notifications/tokens") })
+        #expect(requestRecorder.methods == ["POST", "DELETE"])
+        #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer access-token" })
+        #expect(postBody?.contains(#""platform":"IOS""#) == true)
+        #expect(postBody?.contains(#""deviceToken":"fcm-token""#) == true)
+        #expect(deleteQuery["platform"] == "IOS")
+        #expect(deleteQuery["deviceToken"] == "fcm-token")
+    }
+
     @Test func alarmViewModelGroupsItemsBySection() async throws {
         let viewModel = AlarmViewModel(alertsRepository: MockAlertsRepository())
 
         await viewModel.load()
-        #expect(viewModel.state.sections[.available]?.count == 1)
-        #expect(viewModel.state.sections[.waiting]?.count == 1)
+        #expect(viewModel.state.sections[.available]?.count == 2)
+        #expect(viewModel.state.sections[.waiting]?.count == 2)
         #expect(viewModel.state.sections[.available]?.first?.libraryName == "강남 도서관")
+        #expect(viewModel.state.sections[.available]?.first?.metadataText == "강남 도서관에서 대출가능 상태로 바뀌었습니다.")
+        #expect(viewModel.state.sections[.available]?.first?.coverImageURL?.absoluteString.contains("9788936434267") == true)
+        #expect(viewModel.state.sections[.available]?.first?.action == .delete)
+        #expect(viewModel.state.sections[.waiting]?.first?.coverImageURL?.absoluteString.contains("9788936434120") == true)
+        #expect(viewModel.state.sections[.waiting]?.first?.action == .unsubscribe)
+    }
+
+    @Test func alarmViewModelDeletesAlertOptimistically() async throws {
+        let alert = AlertItem(
+            id: "123",
+            section: .available,
+            book: makeTestBook(id: "9791198363510", title: "아몬드"),
+            libraryID: "456",
+            libraryName: "구미시립중앙도서관"
+        )
+        let alertsRepository = RecordingAlertsRepository(alerts: [alert])
+        let viewModel = AlarmViewModel(alertsRepository: alertsRepository)
+
+        await viewModel.load()
+        await viewModel.didDeleteAlert(id: "123")
+
+        #expect(alertsRepository.deletedAlertIDs == ["123"])
+        #expect(viewModel.state.sections.isEmpty)
     }
 
     @Test func locationPickerViewModelAcceptsPostcodeSelection() async throws {

@@ -109,9 +109,6 @@ final class LikeViewController: BaseViewController, UICollectionViewDelegate {
 
         let libraryRegistration = UICollectionView.CellRegistration<LibraryCardCell, LibraryCardItemViewData> { [weak self] cell, _, item in
             cell.configure(viewData: item)
-            cell.onBellTap = {
-                // Alerts API is not available yet.
-            }
             cell.onHeartTap = { [weak self] in
                 Task { await self?.viewModel.didToggleLibraryFavorite(id: item.id) }
             }
@@ -222,11 +219,11 @@ private final class LikeView: UIView {
         UICollectionViewCompositionalLayout { _, _ in
             let item = NSCollectionLayoutItem(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(96)
+                heightDimension: .estimated(FavoriteBookCell.preferredHeight)
             ))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: .init(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(96)
+                heightDimension: .estimated(FavoriteBookCell.preferredHeight)
             ), subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
             section.interGroupSpacing = AppSpacing.s
