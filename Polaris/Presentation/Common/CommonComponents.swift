@@ -449,6 +449,7 @@ final class InlineToggleView: UIControl {
         stackView.axis = .horizontal
         stackView.spacing = AppSpacing.xs
         stackView.alignment = .center
+        stackView.isUserInteractionEnabled = false
         addSubview(stackView)
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.pinEdges(to: self)

@@ -229,7 +229,7 @@ private final class HomeView: UIView {
     let homeCollectionView: UICollectionView
     let searchBooksCollectionView: UICollectionView
     let searchDistanceChipView = FilterChipGroupView(options: DistanceOption.allCases, selected: .twoKm)
-    let searchExcludeToggle = InlineToggleView(title: "대출불가 제외")
+    let searchExcludeToggle = InlineToggleView(title: "대출 가능만")
     let searchLibrariesCollectionView: ContentSizedCollectionView
     private let searchBooksLoadingView = LoadingOverlayView()
     private let searchLibrariesLoadingView = LoadingOverlayView()

@@ -130,6 +130,16 @@ struct AddressSuggestion: Identifiable, Hashable, Sendable {
     let longitude: Double?
 }
 
+extension AddressSuggestion {
+    static let defaultLocation = AddressSuggestion(
+        id: "kumoh-national-institute-of-technology",
+        roadAddress: "경상북도 구미시 대학로 61",
+        detailText: "국립금오공과대학교",
+        latitude: 36.1450,
+        longitude: 128.3937
+    )
+}
+
 struct BadgeContent: Hashable, Sendable {
     enum Tone: Hashable, Sendable {
         case blue
