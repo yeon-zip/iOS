@@ -1123,6 +1123,46 @@ struct PolarisTests {
         #expect(libraries.first?.distanceText == "경상북도 구미시 옥계북로 51")
     }
 
+    @Test func liveFavoritesRepositoryTreatsSatisfiedBookmarkMutationsAsSuccess() async throws {
+        defer { URLProtocolStub.requestHandler = nil }
+
+        let requestRecorder = RequestRecorder()
+        let session = makeStubbedSession { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            requestRecorder.record(request)
+
+            let statusCode: Int
+            switch request.httpMethod {
+            case "POST":
+                statusCode = 409
+            case "DELETE":
+                statusCode = 404
+            default:
+                statusCode = 200
+            }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data())
+        }
+        let repository = LiveFavoritesRepository(
+            apiClient: PolarisAPIClient(session: session),
+            authRepository: MockAuthRepository(session: Self.authSession())
+        )
+
+        try await repository.setBookFavorite(id: "9791198363510", isFavorite: true)
+        try await repository.setBookFavorite(id: "9791198363510", isFavorite: false)
+
+        #expect(requestRecorder.paths.filter { $0.hasSuffix("/books/9791198363510/bookmark") }.count == 2)
+        #expect(requestRecorder.methods == ["POST", "DELETE"])
+    }
+
     @Test func liveBookVoteRepositoryUsesVoteEndpointAndBody() async throws {
         defer { URLProtocolStub.requestHandler = nil }
 

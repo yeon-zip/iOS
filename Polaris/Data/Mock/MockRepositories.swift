@@ -1342,18 +1342,37 @@ struct LiveFavoritesRepository: FavoritesRepository {
 
     func setBookFavorite(id: String, isFavorite: Bool) async throws {
         guard id.isEmpty == false else { throw PolarisAPIClientError.invalidURL }
-        try await authorizedSend(
-            "books/\(id)/bookmark",
-            method: isFavorite ? .post : .delete
+        try await sendFavoriteMutation(
+            path: "books/\(id)/bookmark",
+            isFavorite: isFavorite
         )
     }
 
     func setLibraryFavorite(id: String, isFavorite: Bool) async throws {
         guard id.isEmpty == false else { throw PolarisAPIClientError.invalidURL }
-        try await authorizedSend(
-            "libraries/\(id)/bookmark",
-            method: isFavorite ? .post : .delete
+        try await sendFavoriteMutation(
+            path: "libraries/\(id)/bookmark",
+            isFavorite: isFavorite
         )
+    }
+
+    private func sendFavoriteMutation(path: String, isFavorite: Bool) async throws {
+        do {
+            try await authorizedSend(
+                path,
+                method: isFavorite ? .post : .delete
+            )
+        } catch PolarisAPIClientError.httpStatus(let statusCode)
+            where isSatisfiedFavoriteStatus(statusCode, isFavorite: isFavorite) {
+            return
+        }
+    }
+
+    private func isSatisfiedFavoriteStatus(_ statusCode: Int, isFavorite: Bool) -> Bool {
+        if isFavorite {
+            return statusCode == 409
+        }
+        return statusCode == 404
     }
 
     private func authorizedGet<Response: Decodable>(_ path: String) async throws -> Response {

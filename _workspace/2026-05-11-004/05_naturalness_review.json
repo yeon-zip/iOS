@@ -1,0 +1,26 @@
+{
+  "run_id": "2026-05-11-004",
+  "status": "accept_with_note",
+  "quality_grade": "A-",
+  "category_counts_after": {
+    "A-10": 1,
+    "A-11": 0,
+    "D-1": 0,
+    "E-1": 0,
+    "E-2": 1,
+    "F-4": 0,
+    "I-4": 1
+  },
+  "self_check": {
+    "preservation": true,
+    "change_rate_under_30_percent": true,
+    "genre_preserved": true,
+    "register_preserved": true,
+    "s1_residual_zero": true,
+    "no_artificial_expression": true
+  },
+  "residual_findings": [
+    "'생길 수 있다'는 가능성을 나타내는 기능 설명이라 유지했다.",
+    "'보완할 필요가 있다'는 향후 연구 문맥상 자연스러운 권고 표현이라 유지했다."
+  ]
+}

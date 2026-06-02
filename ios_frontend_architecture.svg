@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .title { font: 700 42px "Apple SD Gothic Neo", "Arial Unicode MS", sans-serif; fill: #111827; }
+      .subtitle { font: 500 20px "Apple SD Gothic Neo", "Arial Unicode MS", sans-serif; fill: #475569; }
+      .label { font: 700 24px "Apple SD Gothic Neo", "Arial Unicode MS", sans-serif; fill: #111827; }
+      .small { font: 500 17px "Apple SD Gothic Neo", "Arial Unicode MS", sans-serif; fill: #334155; }
+      .tiny { font: 500 14px "Apple SD Gothic Neo", "Arial Unicode MS", sans-serif; fill: #64748b; }
+      .mono { font: 700 18px "Menlo", monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #d8e0ea; stroke-width: 2; filter: url(#shadow); }
+      .soft { fill: #f8fafc; stroke: #d8e0ea; stroke-width: 2; }
+      .blue { fill: #eaf6fb; stroke: #58b6cc; stroke-width: 2; }
+      .green { fill: #ecfdf3; stroke: #59b36a; stroke-width: 2; }
+      .yellow { fill: #fff7e6; stroke: #f1b94e; stroke-width: 2; }
+      .purple { fill: #f2efff; stroke: #7567d8; stroke-width: 2; }
+      .red { fill: #fff1f2; stroke: #e2555f; stroke-width: 2; }
+      .dark { fill: #111827; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 8 7; fill: none; marker-end: url(#arrowSoft); }
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowSoft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="#ffffff"/>
+  <circle cx="1510" cy="-40" r="210" fill="#f3f6fa"/>
+  <rect x="75" y="72" width="10" height="68" fill="#58b6cc"/>
+  <text x="105" y="122" class="title">iOS 클라이언트 계층 전체 구조</text>
+  <text x="105" y="164" class="subtitle">Polaris 앱은 UIKit 기반 MVVM 구조로 화면 상태를 분리하고, Repository와 API Client를 통해 Backend REST API와 통신한다.</text>
+
+  <rect x="85" y="220" width="920" height="590" rx="22" class="card"/>
+  <text x="115" y="265" class="label">Polaris iOS App</text>
+  <text x="115" y="296" class="tiny">Swift 5 · UIKit · async/await · URLSession · Programmatic UI</text>
+
+  <rect x="125" y="335" width="250" height="135" rx="18" class="blue"/>
+  <text x="152" y="376" class="label">Presentation</text>
+  <text x="152" y="410" class="small">ViewController</text>
+  <text x="152" y="438" class="tiny">Home / Search / Detail</text>
+  <text x="152" y="462" class="tiny">Like / Alarm / Profile / Login</text>
+
+  <rect x="430" y="335" width="240" height="135" rx="18" class="purple"/>
+  <text x="462" y="376" class="label">ViewModel</text>
+  <text x="462" y="410" class="small">State + Action 처리</text>
+  <text x="462" y="438" class="tiny">화면 상태 갱신</text>
+  <text x="462" y="462" class="tiny">비동기 로딩 제어</text>
+
+  <rect x="725" y="335" width="240" height="135" rx="18" class="green"/>
+  <text x="754" y="376" class="label">Domain</text>
+  <text x="754" y="410" class="small">Models / Protocols</text>
+  <text x="754" y="438" class="tiny">Book, Library, Alert</text>
+  <text x="754" y="462" class="tiny">Repository Interface</text>
+
+  <rect x="125" y="540" width="250" height="165" rx="18" class="yellow"/>
+  <text x="152" y="581" class="label">Navigation</text>
+  <text x="152" y="615" class="small">AppNavigator</text>
+  <text x="152" y="643" class="tiny">AppRoute 기반 화면 전환</text>
+  <text x="152" y="667" class="tiny">NavigationController 관리</text>
+
+  <rect x="430" y="540" width="240" height="165" rx="18" class="soft"/>
+  <text x="462" y="581" class="label">Data Layer</text>
+  <text x="462" y="615" class="small">Live Repositories</text>
+  <text x="462" y="643" class="tiny">Search / Book / Library</text>
+  <text x="462" y="667" class="tiny">Favorite / Alert / Profile</text>
+
+  <rect x="725" y="540" width="240" height="165" rx="18" class="red"/>
+  <text x="754" y="581" class="label">Network</text>
+  <text x="754" y="615" class="small">PolarisAPIClient</text>
+  <text x="754" y="643" class="tiny">REST JSON 요청/응답</text>
+  <text x="754" y="667" class="tiny">Token Header 처리</text>
+
+  <path d="M375 402 L430 402" class="arrow"/>
+  <path d="M670 402 L725 402" class="arrow"/>
+  <path d="M845 470 L845 540" class="arrow"/>
+  <path d="M725 623 L670 623" class="arrow"/>
+  <path d="M430 623 L375 623" class="arrow"/>
+  <path d="M250 540 L250 488" class="dash"/>
+
+  <rect x="1050" y="250" width="405" height="165" rx="22" class="card"/>
+  <text x="1085" y="298" class="label">Backend API Server</text>
+  <text x="1085" y="334" class="mono">https://api.k-polaris.life/api/v1</text>
+  <text x="1085" y="368" class="tiny">도서 검색 · 도서관 조회 · 찜 · 알림 · 추천 투표</text>
+
+  <path d="M965 623 C1035 623 1022 335 1050 335" class="arrow"/>
+  <text x="1006" y="515" class="tiny">HTTPS REST / JSON</text>
+
+  <rect x="1050" y="490" width="405" height="235" rx="22" class="soft"/>
+  <text x="1085" y="538" class="label">iOS System / External SDK</text>
+  <text x="1085" y="582" class="small">CoreLocation · MapKit</text>
+  <text x="1085" y="616" class="small">WebKit · AuthenticationServices</text>
+  <text x="1085" y="650" class="small">UserNotifications · Firebase Messaging</text>
+  <text x="1085" y="684" class="small">Keychain · Security</text>
+
+  <path d="M845 705 C910 760 1010 735 1050 675" class="dash"/>
+  <path d="M250 705 C430 785 820 790 1050 610" class="dash"/>
+  <text x="790" y="778" class="tiny">위치, 인증, 푸시, 보안 저장소는 iOS 시스템/SDK를 통해 연동</text>
+
+  <rect x="115" y="735" width="850" height="42" rx="14" fill="#eef8fb" stroke="#bfe7f0" stroke-width="1.5"/>
+  <text x="145" y="762" class="small">의존성 주입: AppDependencies가 Repository 구현체를 조립하고, ViewModel은 Protocol에 의존한다.</text>
+</svg>

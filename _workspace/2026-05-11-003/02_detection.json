@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "run_id": "2026-05-11-003",
+    "input_length": 415,
+    "estimated_genre": "report",
+    "detected_count": 7,
+    "ai_tell_density": "medium",
+    "severity_weighted_score": 12,
+    "category_summary": {
+      "A-2": 1,
+      "A-6": 1,
+      "E-1": 1,
+      "E-2": 2,
+      "H-3": 1,
+      "F-4": 1
+    }
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "category": "A-6",
+      "category_label": "based-on style",
+      "severity": "S2",
+      "scope": "sentence",
+      "text_span": "서버는 이 값을 바탕으로",
+      "reason": "근거 표현이 직역투처럼 보이며 앞뒤 문장과 결합하면 기계적 설명 흐름을 만든다.",
+      "suggested_fix": "사용자 입력을 받은 뒤 서버가 작업을 이어받는 구조로 풀어쓴다."
+    },
+    {
+      "id": "F002",
+      "category": "A-2",
+      "category_label": "through overuse",
+      "severity": "S1",
+      "scope": "sentence",
+      "text_span": "도서관 정보나루 API를 통해",
+      "reason": "기술 설명에서 자주 보이는 '~을 통해' 구문이다.",
+      "suggested_fix": "API 요청 결과 또는 API 응답을 주어로 바꾸어 서술한다."
+    },
+    {
+      "id": "F003",
+      "category": "E-2",
+      "category_label": "same sentence ending",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "구성된다 / 전달한다 / 수행한다 / 활용한다 / 확인한다 / 담당한다 / 같다",
+      "reason": "대부분의 문장이 동일한 평서 종결로 닫혀 문장 리듬이 단조롭다.",
+      "suggested_fix": "문장 길이와 종결 구조를 일부 바꾼다."
+    },
+    {
+      "id": "F004",
+      "category": "E-1",
+      "category_label": "uniform rhythm",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "각 문장이 유사한 길이로 API 기능을 하나씩 나열",
+      "reason": "기능 설명이 같은 단위로 반복되어 자동 생성 문단처럼 읽힌다.",
+      "suggested_fix": "서버 흐름 문장과 API별 역할 문장을 분리해 호흡을 바꾼다."
+    },
+    {
+      "id": "F005",
+      "category": "H-3",
+      "category_label": "meta reference",
+      "severity": "S1",
+      "scope": "sentence",
+      "text_span": "이 값을",
+      "reason": "앞 문장의 정보를 대명사로 받으면서 설명 흐름이 압축되어 기계적으로 보인다.",
+      "suggested_fix": "사용자가 입력한 값이라는 의미를 문장 구조로 풀어쓴다."
+    },
+    {
+      "id": "F006",
+      "category": "F-4",
+      "category_label": "nominalized technical chain",
+      "severity": "S2",
+      "scope": "phrase",
+      "text_span": "도서 검색, ISBN 추출, 도서관 소장 조회",
+      "reason": "명사형 절차가 쉼표로만 이어져 나열식 인상이 강하다.",
+      "suggested_fix": "절차 일부를 동사형으로 풀어쓴다."
+    },
+    {
+      "id": "F007",
+      "category": "E-2",
+      "category_label": "repeated subject pattern",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "클라이언트는 / 서버는 / 국가자료종합목록 OpenAPI는 / 카카오맵 API는",
+      "reason": "주어-기능-종결 구조가 반복된다.",
+      "suggested_fix": "앞부분은 사용자 흐름 중심, 뒷부분은 API 역할 중심으로 재배치한다."
+    }
+  ]
+}

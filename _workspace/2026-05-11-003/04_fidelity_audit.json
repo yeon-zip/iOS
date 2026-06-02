@@ -1,0 +1,18 @@
+{
+  "run_id": "2026-05-11-003",
+  "status": "full_pass",
+  "checks": {
+    "names_preserved": true,
+    "numbers_preserved": true,
+    "api_names_preserved": true,
+    "claim_direction_preserved": true,
+    "causality_preserved": true,
+    "ordering_preserved": true,
+    "no_unverified_feature_added": true
+  },
+  "notes": [
+    "Spring Boot, ISBN, 네이버 도서 검색 API, 도서관 정보나루 API, 국가자료종합목록 OpenAPI, 카카오맵 API, 그림 1을 보존했다.",
+    "'제안하는'은 시제만 자연스럽게 '제안한'으로 조정했으며 논문 서술 범위는 유지된다.",
+    "'함께 동작하는 구조'는 원문의 구성 관계를 풀어쓴 표현이다."
+  ]
+}

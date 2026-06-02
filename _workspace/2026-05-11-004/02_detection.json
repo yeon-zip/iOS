@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "run_id": "2026-05-11-004",
+    "input_length": 513,
+    "estimated_genre": "report",
+    "detected_count": 9,
+    "ai_tell_density": "medium_high",
+    "severity_weighted_score": 17,
+    "category_summary": {
+      "A-10": 2,
+      "A-11": 2,
+      "D-1": 1,
+      "E-1": 1,
+      "E-2": 1,
+      "F-4": 1,
+      "I-4": 1
+    }
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "category": "F-4",
+      "category_label": "nominalized process chain",
+      "severity": "S2",
+      "scope": "sentence",
+      "text_span": "도서 검색부터 ISBN 추출, 주변 도서관 조회, 대출 상태 확인 까지의 과정",
+      "reason": "명사형 절차가 쉼표로 이어져 설명이 자동 생성 문장처럼 보인다.",
+      "suggested_fix": "처리 절차를 동사형 문장으로 풀거나 짧은 명사구로 정리한다."
+    },
+    {
+      "id": "F002",
+      "category": "D-1",
+      "category_label": "conclusion pivot",
+      "severity": "S1",
+      "scope": "sentence",
+      "text_span": "따라서",
+      "reason": "결론형 접속어가 문단 끝의 권고문과 결합해 AI식 마무리 인상을 만든다.",
+      "suggested_fix": "접속어를 삭제하고 문제 상황에서 바로 보완 방향으로 이어간다."
+    },
+    {
+      "id": "F003",
+      "category": "A-10",
+      "category_label": "can overuse",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "확인할 수 있다 / 확인할 수 있게 한다 / 발생할 수 있다",
+      "reason": "가능 표현이 반복되어 문장이 무난하지만 기계적으로 읽힌다.",
+      "suggested_fix": "확정 서술과 필요성 서술을 섞는다."
+    },
+    {
+      "id": "F004",
+      "category": "A-11",
+      "category_label": "purpose clause overuse",
+      "severity": "S2",
+      "scope": "sentence",
+      "text_span": "사용자 경험을 높이기 위해",
+      "reason": "목적절이 보고서형 AI 문장에 자주 나타나는 구조이다.",
+      "suggested_fix": "연구 초점 자체를 주어로 바꿔 서술한다."
+    },
+    {
+      "id": "F005",
+      "category": "I-4",
+      "category_label": "formulaic recommendation ending",
+      "severity": "S2",
+      "scope": "sentence",
+      "text_span": "보완해야 한다",
+      "reason": "권고형 결말이 일반적이고 판에 박힌 인상을 준다.",
+      "suggested_fix": "구체 보완 항목을 먼저 제시한 뒤 필요성을 낮은 톤으로 닫는다."
+    },
+    {
+      "id": "F006",
+      "category": "E-1",
+      "category_label": "uniform rhythm",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "전체 문단",
+      "reason": "기능 설명과 향후 연구가 한 문단에 같은 길이의 문장으로 이어진다.",
+      "suggested_fix": "기능 요약과 향후 과제를 분리한다."
+    },
+    {
+      "id": "F007",
+      "category": "E-2",
+      "category_label": "same ending",
+      "severity": "S2",
+      "scope": "paragraph",
+      "text_span": "연결한다 / 줄인다 / 한다 / 한다",
+      "reason": "문장 종결이 단조롭다.",
+      "suggested_fix": "서술형, 명사형, 필요성 문장을 섞는다."
+    },
+    {
+      "id": "F008",
+      "category": "A-10",
+      "category_label": "safe generic expression",
+      "severity": "S2",
+      "scope": "phrase",
+      "text_span": "쉽게 확인할 수 있게 한다",
+      "reason": "일반적이고 안전한 제품 설명 문구이다.",
+      "suggested_fix": "확인 경로를 직접 서술한다."
+    },
+    {
+      "id": "F009",
+      "category": "spacing",
+      "category_label": "surface errors",
+      "severity": "S3",
+      "scope": "phrase",
+      "text_span": "한권의 / 사용자가이미 / 대출한도서 / 대출가능 / 다음과제 / 사용자수",
+      "reason": "띄어쓰기 오류가 있어 문장 완성도가 떨어진다.",
+      "suggested_fix": "표준 띄어쓰기로 정리한다."
+    }
+  ]
+}
