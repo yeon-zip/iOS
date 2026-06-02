@@ -1,0 +1,17 @@
+{
+  "run_id": "2026-05-11-004",
+  "status": "full_pass",
+  "checks": {
+    "technical_terms_preserved": true,
+    "api_constraint_preserved": true,
+    "feature_set_preserved": true,
+    "future_work_preserved": true,
+    "no_new_claim_added": true,
+    "claim_direction_preserved": true
+  },
+  "notes": [
+    "도서 검색, ISBN 추출, 주변 도서관 조회, 대출 상태 확인, 알림 신청, 배치 수집, 중간 저장소 내용을 모두 유지했다.",
+    "띄어쓰기 오류는 표준 표기로 고쳤다.",
+    "기능 설명과 향후 연구 문단을 분리했지만 내용 순서는 유지했다."
+  ]
+}
