@@ -1,10 +1,3 @@
-//
-//  SearchResultsViewController.swift
-//  Polaris
-//
-//  Created by Codex on 4/8/26.
-//
-
 import UIKit
 #if canImport(SwiftUI)
 import SwiftUI

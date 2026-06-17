@@ -1,10 +1,3 @@
-//
-//  AuthTests.swift
-//  PolarisTests
-//
-//  Created by Codex on 4/26/26.
-//
-
 import Foundation
 import Testing
 import UIKit
@@ -188,6 +181,28 @@ struct AuthTests {
         #expect(exchangeCall == nil)
         #expect(viewModel.state.isLoading == false)
         #expect(viewModel.state.errorMessage == "로그인 응답 URL이 올바르지 않습니다.")
+    }
+
+    @MainActor
+    @Test func loginViewModelShowsLoginFailureWhenCallbackContainsOAuthError() async throws {
+        let authRepository = RecordingAuthRepository(
+            loginRequest: AuthLoginRequest(
+                url: URL(string: "https://api.k-polaris.life/api/v1/auth/kakao/login")!,
+                codeVerifier: "pending-verifier",
+                callbackScheme: "polaris"
+            )
+        )
+        let viewModel = LoginViewModel(authRepository: authRepository)
+
+        _ = await viewModel.prepareKakaoLogin()
+        await viewModel.completeLogin(
+            callbackURL: URL(string: "polaris://auth/callback?error=login_failed&errorCode=OIDC_LOGIN_FAILED&correlationId=fef59fe4-c6ec-4d3a-868e-ed175e4d4ed3")!
+        )
+
+        let exchangeCall = await authRepository.recordedExchangeCall()
+        #expect(exchangeCall == nil)
+        #expect(viewModel.state.isLoading == false)
+        #expect(viewModel.state.errorMessage == "카카오 로그인에 실패했습니다. 다시 시도해주세요.")
     }
 
     @MainActor

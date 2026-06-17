@@ -1,10 +1,3 @@
-//
-//  PKCE.swift
-//  Polaris
-//
-//  Created by Codex on 4/26/26.
-//
-
 import CryptoKit
 import Foundation
 import Security

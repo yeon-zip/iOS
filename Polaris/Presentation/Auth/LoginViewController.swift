@@ -1,10 +1,3 @@
-//
-//  LoginViewController.swift
-//  Polaris
-//
-//  Created by Codex on 4/26/26.
-//
-
 import AuthenticationServices
 import UIKit
 #if canImport(SwiftUI)
@@ -75,14 +68,27 @@ final class LoginViewController: BaseViewController {
                 self.webAuthSession = nil
 
                 if let callbackURL {
+                    #if DEBUG
+                    print("Kakao callback URL:", callbackURL.absoluteString)
+                    #endif
                     Task { await self.viewModel.completeLogin(callbackURL: callbackURL) }
                     return
                 }
 
                 if let authenticationError = error as? ASWebAuthenticationSessionError,
                    authenticationError.code == .canceledLogin {
+                    #if DEBUG
+                    print("Kakao auth session canceled:", authenticationError.localizedDescription)
+                    #endif
                     self.viewModel.didCancelExternalLogin()
                 } else {
+                    #if DEBUG
+                    if let error {
+                        print("Kakao auth session failed:", error.localizedDescription)
+                    } else {
+                        print("Kakao auth session failed without callback URL or error.")
+                    }
+                    #endif
                     self.viewModel.didFailExternalLogin()
                 }
             }

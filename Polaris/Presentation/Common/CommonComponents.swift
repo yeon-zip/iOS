@@ -1,10 +1,3 @@
-//
-//  CommonComponents.swift
-//  Polaris
-//
-//  Created by Codex on 4/8/26.
-//
-
 import UIKit
 
 final class CardContainerView: UIView {

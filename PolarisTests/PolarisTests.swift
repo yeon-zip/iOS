@@ -1,10 +1,3 @@
-//
-//  PolarisTests.swift
-//  PolarisTests
-//
-//  Created by 손유나 on 3/27/26.
-//
-
 import Foundation
 import Testing
 import UIKit

@@ -1,10 +1,3 @@
-//
-//  LocationAddressService.swift
-//  Polaris
-//
-//  Created by Codex on 4/8/26.
-//
-
 import Contacts
 import CoreLocation
 import Foundation

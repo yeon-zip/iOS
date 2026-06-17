@@ -1,10 +1,3 @@
-//
-//  AppModels.swift
-//  Polaris
-//
-//  Created by Codex on 4/8/26.
-//
-
 import Foundation
 
 enum DistanceOption: String, CaseIterable, Hashable, Sendable {
@@ -279,6 +272,7 @@ struct AuthLoginRequest: Equatable, Sendable {
 enum AuthError: Error, Equatable {
     case invalidLoginURL
     case invalidCallback
+    case callbackFailure(String?)
     case missingAuthorizationCode
     case missingTargetID
     case missingPendingLogin

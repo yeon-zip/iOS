@@ -1,10 +1,3 @@
-//
-//  AppRuntime.swift
-//  Polaris
-//
-//  Created by Codex on 5/5/26.
-//
-
 import UIKit
 
 @MainActor

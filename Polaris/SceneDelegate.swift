@@ -1,10 +1,3 @@
-//
-//  SceneDelegate.swift
-//  Polaris
-//
-//  Created by 손유나 on 3/27/26.
-//
-
 import UIKit
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {

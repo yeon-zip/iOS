@@ -1,10 +1,3 @@
-//
-//  LikeViewController.swift
-//  Polaris
-//
-//  Created by 손유나 on 4/1/26.
-//
-
 import UIKit
 #if canImport(SwiftUI)
 import SwiftUI

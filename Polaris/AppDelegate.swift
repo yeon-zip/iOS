@@ -1,10 +1,3 @@
-//
-//  AppDelegate.swift
-//  Polaris
-//
-//  Created by 손유나 on 3/27/26.
-//
-
 import UIKit
 
 @main

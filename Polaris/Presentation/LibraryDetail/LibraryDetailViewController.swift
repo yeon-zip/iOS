@@ -1,10 +1,3 @@
-//
-//  LibraryDetailViewController.swift
-//  Polaris
-//
-//  Created by Codex on 4/8/26.
-//
-
 import MapKit
 import UIKit
 #if canImport(SwiftUI)

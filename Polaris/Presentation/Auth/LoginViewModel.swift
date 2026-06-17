@@ -1,10 +1,3 @@
-//
-//  LoginViewModel.swift
-//  Polaris
-//
-//  Created by Codex on 4/26/26.
-//
-
 import Foundation
 
 @MainActor
@@ -99,6 +92,8 @@ final class LoginViewModel {
         switch authError {
         case .invalidCallback:
             return "로그인 응답 URL이 올바르지 않습니다."
+        case .callbackFailure(_):
+            return "카카오 로그인에 실패했습니다. 다시 시도해주세요."
         case .missingAuthorizationCode:
             return "로그인 인증 코드를 찾지 못했습니다."
         case .missingTargetID:
@@ -123,6 +118,10 @@ private struct AuthCallback {
         let queryItems = Self.queryItems(from: url)
         guard queryItems.isEmpty == false else {
             throw AuthError.invalidCallback
+        }
+
+        if queryItems["error"] != nil || queryItems["errorCode"] != nil {
+            throw AuthError.callbackFailure(queryItems["errorCode"] ?? queryItems["error"])
         }
 
         guard let code = queryItems["code"], code.isEmpty == false else {

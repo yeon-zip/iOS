@@ -1,10 +1,3 @@
-//
-//  AppNavigationController.swift
-//  Polaris
-//
-//  Created by Codex on 4/18/26.
-//
-
 import UIKit
 
 final class AppNavigationController: UINavigationController, UIGestureRecognizerDelegate {

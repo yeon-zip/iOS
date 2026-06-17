@@ -1,10 +1,3 @@
-//
-//  PushNotificationCoordinator.swift
-//  Polaris
-//
-//  Created by Codex on 5/5/26.
-//
-
 import UIKit
 import UserNotifications
 #if canImport(FirebaseCore) && canImport(FirebaseMessaging)

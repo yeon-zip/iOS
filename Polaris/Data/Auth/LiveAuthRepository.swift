@@ -1,10 +1,3 @@
-//
-//  LiveAuthRepository.swift
-//  Polaris
-//
-//  Created by Codex on 4/26/26.
-//
-
 import Foundation
 
 actor LiveAuthRepository: AuthRepository {
