@@ -1,4 +1,5 @@
 import UIKit
+import MapKit
 import WebKit
 
 struct PostcodeSelection: Equatable {
@@ -20,10 +21,12 @@ struct PostcodeSelection: Equatable {
 final class LocationPickerViewModel {
     struct State: Equatable {
         var currentAddress: String
-        var helperText = "카카오 주소 검색에서 정확한 주소를 선택해 주세요."
+        var helperText = "현재 위치, 지도 핀, 카카오 주소 검색 중 하나로 위치를 선택해 주세요."
         var isResolvingCurrentLocation = false
         var isResolvingSelectedAddress = false
         var selectedAddress: AddressSuggestion?
+        var mapLatitude: Double?
+        var mapLongitude: Double?
     }
 
     var onStateChange: ((State) -> Void)?
@@ -39,7 +42,11 @@ final class LocationPickerViewModel {
         locationAddressService: any LocationAddressService
     ) {
         self.locationAddressService = locationAddressService
-        self.state = State(currentAddress: currentLocation.roadAddress)
+        self.state = State(
+            currentAddress: currentLocation.roadAddress,
+            mapLatitude: currentLocation.latitude,
+            mapLongitude: currentLocation.longitude
+        )
     }
 
     func load() {
@@ -62,6 +69,8 @@ final class LocationPickerViewModel {
                 let suggestion = try await locationAddressService.requestCurrentAddress()
                 guard Task.isCancelled == false, generation == selectionGeneration else { return }
                 state.selectedAddress = suggestion
+                state.mapLatitude = suggestion.latitude
+                state.mapLongitude = suggestion.longitude
                 state.helperText = "현재 위치 주소를 불러왔어요. 이 주소로 설정할 수 있어요."
             } catch {
                 guard Task.isCancelled == false, generation == selectionGeneration else { return }
@@ -93,11 +102,49 @@ final class LocationPickerViewModel {
                 )
                 guard Task.isCancelled == false, generation == selectionGeneration else { return }
                 state.selectedAddress = suggestion
+                state.mapLatitude = suggestion.latitude
+                state.mapLongitude = suggestion.longitude
                 state.helperText = "선택한 주소를 적용할 준비가 됐어요."
             } catch {
                 guard Task.isCancelled == false, generation == selectionGeneration else { return }
                 state.selectedAddress = nil
                 state.helperText = "선택한 주소의 위치를 확인하지 못했어요. 다시 선택해 주세요."
+            }
+
+            guard generation == selectionGeneration else { return }
+            state.isResolvingSelectedAddress = false
+            onStateChange?(state)
+        }
+    }
+
+    func didSelectMapCoordinate(latitude: Double, longitude: Double) {
+        cancelPendingSelection()
+        state.isResolvingCurrentLocation = false
+        state.isResolvingSelectedAddress = true
+        state.selectedAddress = nil
+        state.mapLatitude = latitude
+        state.mapLongitude = longitude
+        state.helperText = "지도에서 선택한 위치의 주소를 확인하는 중이에요."
+        onStateChange?(state)
+
+        let generation = selectionGeneration
+        selectionTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let suggestion = try await locationAddressService.resolveAddress(
+                    latitude: latitude,
+                    longitude: longitude
+                )
+                guard Task.isCancelled == false, generation == selectionGeneration else { return }
+                state.selectedAddress = suggestion
+                state.mapLatitude = suggestion.latitude
+                state.mapLongitude = suggestion.longitude
+                state.helperText = "지도에서 선택한 위치를 적용할 준비가 됐어요."
+            } catch {
+                guard Task.isCancelled == false, generation == selectionGeneration else { return }
+                state.selectedAddress = nil
+                state.helperText = "지도에서 선택한 위치의 주소를 확인하지 못했어요. 핀을 다시 움직여 주세요."
             }
 
             guard generation == selectionGeneration else { return }
@@ -162,6 +209,12 @@ final class LocationPickerViewController: UIViewController {
         contentView.postcodeSearchView.onSelection = { [weak self] selection in
             self?.viewModel.didSelectPostcode(selection)
         }
+        contentView.mapSelectionView.onCoordinateChange = { [weak self] coordinate in
+            self?.viewModel.didSelectMapCoordinate(
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+        }
 
         viewModel.onStateChange = { [weak self] state in
             self?.render(state)
@@ -178,6 +231,9 @@ final class LocationPickerViewController: UIViewController {
         contentView.currentAddressValueLabel.text = state.currentAddress
         contentView.helperLabel.text = state.helperText
         contentView.updateSelectedAddress(state.selectedAddress)
+        if let latitude = state.mapLatitude, let longitude = state.mapLongitude {
+            contentView.updateMapCoordinate(latitude: latitude, longitude: longitude)
+        }
         contentView.updateCurrentLocationButton(isLoading: state.isResolvingCurrentLocation)
         contentView.updateConfirmButton(
             isEnabled: state.selectedAddress?.latitude != nil &&
@@ -195,6 +251,7 @@ private final class LocationPickerView: UIView {
     let currentLocationButton = UIButton(type: .system)
     let helperLabel = UILabel()
     let confirmButton = UIButton(type: .system)
+    let mapSelectionView = LocationPickerMapView()
     let postcodeSearchView = KakaoPostcodeSearchView()
 
     private let selectedAddressValueLabel = UILabel()
@@ -212,7 +269,7 @@ private final class LocationPickerView: UIView {
         contentStack.spacing = AppSpacing.l
 
         let subtitleLabel = UILabel()
-        subtitleLabel.text = "현재 위치를 불러오거나 카카오 주소 검색에서 정확한 주소를 선택해 주세요."
+        subtitleLabel.text = "현재 위치를 불러오거나 지도 핀, 카카오 주소 검색으로 정확한 주소를 선택해 주세요."
         subtitleLabel.font = AppTypography.body
         subtitleLabel.textColor = AppColor.textSecondary
         subtitleLabel.numberOfLines = 0
@@ -257,6 +314,18 @@ private final class LocationPickerView: UIView {
         currentLocationConfiguration.title = "현재 위치로 찾기"
         currentLocationButton.configuration = currentLocationConfiguration
 
+        let mapCard = CardContainerView()
+        let mapTitleLabel = UILabel()
+        mapTitleLabel.text = "지도에서 위치 선택"
+        mapTitleLabel.font = AppTypography.subheadline
+        mapTitleLabel.textColor = AppColor.textPrimary
+
+        let mapDescriptionLabel = UILabel()
+        mapDescriptionLabel.text = "핀을 움직이거나 지도 위치를 누르면 선택 주소가 변경돼요."
+        mapDescriptionLabel.font = AppTypography.caption
+        mapDescriptionLabel.textColor = AppColor.textSecondary
+        mapDescriptionLabel.numberOfLines = 0
+
         var confirmConfiguration = UIButton.Configuration.filled()
         confirmConfiguration.baseBackgroundColor = AppColor.textPrimary
         confirmConfiguration.baseForegroundColor = .white
@@ -278,12 +347,16 @@ private final class LocationPickerView: UIView {
         selectedAddressCard.addSubviews(selectedAddressTitleLabel, selectedAddressValueLabel, selectedAddressDetailLabel)
         [selectedAddressTitleLabel, selectedAddressValueLabel, selectedAddressDetailLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
 
+        mapCard.addSubviews(mapTitleLabel, mapDescriptionLabel, mapSelectionView)
+        [mapTitleLabel, mapDescriptionLabel, mapSelectionView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+
         postcodeCard.addSubview(postcodeSearchView)
         postcodeSearchView.translatesAutoresizingMaskIntoConstraints = false
 
         contentStack.addArrangedSubview(subtitleLabel)
         contentStack.addArrangedSubview(currentAddressCard)
         contentStack.addArrangedSubview(currentLocationButton)
+        contentStack.addArrangedSubview(mapCard)
         contentStack.addArrangedSubview(selectedAddressCard)
         contentStack.addArrangedSubview(postcodeCard)
         contentStack.addArrangedSubview(helperLabel)
@@ -312,6 +385,20 @@ private final class LocationPickerView: UIView {
             currentAddressValueLabel.trailingAnchor.constraint(equalTo: currentAddressTitleLabel.trailingAnchor),
             currentAddressValueLabel.bottomAnchor.constraint(equalTo: currentAddressCard.bottomAnchor, constant: -AppSpacing.l),
 
+            mapTitleLabel.topAnchor.constraint(equalTo: mapCard.topAnchor, constant: AppSpacing.l),
+            mapTitleLabel.leadingAnchor.constraint(equalTo: mapCard.leadingAnchor, constant: AppSpacing.l),
+            mapTitleLabel.trailingAnchor.constraint(equalTo: mapCard.trailingAnchor, constant: -AppSpacing.l),
+
+            mapDescriptionLabel.topAnchor.constraint(equalTo: mapTitleLabel.bottomAnchor, constant: AppSpacing.xs),
+            mapDescriptionLabel.leadingAnchor.constraint(equalTo: mapTitleLabel.leadingAnchor),
+            mapDescriptionLabel.trailingAnchor.constraint(equalTo: mapTitleLabel.trailingAnchor),
+
+            mapSelectionView.topAnchor.constraint(equalTo: mapDescriptionLabel.bottomAnchor, constant: AppSpacing.m),
+            mapSelectionView.leadingAnchor.constraint(equalTo: mapCard.leadingAnchor, constant: AppSpacing.l),
+            mapSelectionView.trailingAnchor.constraint(equalTo: mapCard.trailingAnchor, constant: -AppSpacing.l),
+            mapSelectionView.bottomAnchor.constraint(equalTo: mapCard.bottomAnchor, constant: -AppSpacing.l),
+            mapSelectionView.heightAnchor.constraint(equalToConstant: 220),
+
             selectedAddressTitleLabel.topAnchor.constraint(equalTo: selectedAddressCard.topAnchor, constant: AppSpacing.l),
             selectedAddressTitleLabel.leadingAnchor.constraint(equalTo: selectedAddressCard.leadingAnchor, constant: AppSpacing.l),
             selectedAddressTitleLabel.trailingAnchor.constraint(equalTo: selectedAddressCard.trailingAnchor, constant: -AppSpacing.l),
@@ -333,6 +420,7 @@ private final class LocationPickerView: UIView {
         ])
 
         accessibilityIdentifier = "locationPickerScreen"
+        mapSelectionView.accessibilityIdentifier = "locationPicker.mapView"
         postcodeSearchView.accessibilityIdentifier = "locationPicker.postcodeWebView"
         updateSelectedAddress(nil)
     }
@@ -354,6 +442,10 @@ private final class LocationPickerView: UIView {
         selectedAddressDetailLabel.text = suggestion.detailText
     }
 
+    func updateMapCoordinate(latitude: Double, longitude: Double) {
+        mapSelectionView.applyCoordinate(CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
+    }
+
     func updateCurrentLocationButton(isLoading: Bool) {
         var configuration = currentLocationButton.configuration
         configuration?.title = isLoading ? "현재 위치 확인 중..." : "현재 위치로 찾기"
@@ -366,6 +458,121 @@ private final class LocationPickerView: UIView {
         configuration?.title = isLoading ? "주소 확인 중..." : "이 주소로 설정"
         confirmButton.configuration = configuration
         confirmButton.isEnabled = isEnabled
+    }
+}
+
+private final class LocationPickerMapView: UIView, MKMapViewDelegate {
+    var onCoordinateChange: ((CLLocationCoordinate2D) -> Void)?
+
+    private let mapView = MKMapView()
+    private let annotation = MKPointAnnotation()
+    private var hasConfiguredInitialRegion = false
+    private var lastAppliedCoordinate: CLLocationCoordinate2D?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = AppColor.surface
+        layer.cornerRadius = AppRadius.medium
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+
+        annotation.title = "선택 위치"
+        mapView.delegate = self
+        mapView.showsCompass = false
+        mapView.showsScale = false
+        mapView.addAnnotation(annotation)
+        mapView.layer.cornerRadius = AppRadius.medium
+        mapView.layer.cornerCurve = .continuous
+
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleMapTap(_:)))
+        tapGesture.cancelsTouchesInView = false
+        mapView.addGestureRecognizer(tapGesture)
+
+        addSubview(mapView)
+        mapView.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            mapView.topAnchor.constraint(equalTo: topAnchor),
+            mapView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            mapView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            mapView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func applyCoordinate(_ coordinate: CLLocationCoordinate2D) {
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+
+        annotation.coordinate = coordinate
+
+        if hasConfiguredInitialRegion == false {
+            let region = MKCoordinateRegion(
+                center: coordinate,
+                latitudinalMeters: 900,
+                longitudinalMeters: 900
+            )
+            mapView.setRegion(region, animated: false)
+            hasConfiguredInitialRegion = true
+        } else if shouldRecenterMap(to: coordinate) {
+            mapView.setCenter(coordinate, animated: true)
+        }
+
+        lastAppliedCoordinate = coordinate
+    }
+
+    func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        guard annotation is MKUserLocation == false else { return nil }
+
+        let reuseIdentifier = "LocationPickerPin"
+        let markerView: MKMarkerAnnotationView
+        if let dequeuedView = mapView.dequeueReusableAnnotationView(withIdentifier: reuseIdentifier) as? MKMarkerAnnotationView {
+            markerView = dequeuedView
+            markerView.annotation = annotation
+        } else {
+            markerView = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        }
+
+        markerView.canShowCallout = false
+        markerView.isDraggable = true
+        markerView.markerTintColor = AppColor.accent
+        markerView.glyphImage = UIImage(systemName: "mappin")
+        return markerView
+    }
+
+    func mapView(
+        _ mapView: MKMapView,
+        annotationView view: MKAnnotationView,
+        didChange newState: MKAnnotationView.DragState,
+        fromOldState oldState: MKAnnotationView.DragState
+    ) {
+        guard newState == .ending || newState == .canceling else { return }
+        view.dragState = .none
+
+        guard newState == .ending, let coordinate = view.annotation?.coordinate else { return }
+        applyCoordinate(coordinate)
+        onCoordinateChange?(coordinate)
+    }
+
+    @objc private func handleMapTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended else { return }
+        let point = recognizer.location(in: mapView)
+        let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+        applyCoordinate(coordinate)
+        onCoordinateChange?(coordinate)
+    }
+
+    private func shouldRecenterMap(to coordinate: CLLocationCoordinate2D) -> Bool {
+        guard let lastAppliedCoordinate else { return true }
+
+        let previous = CLLocation(
+            latitude: lastAppliedCoordinate.latitude,
+            longitude: lastAppliedCoordinate.longitude
+        )
+        let next = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        return previous.distance(from: next) > 30
     }
 }
 

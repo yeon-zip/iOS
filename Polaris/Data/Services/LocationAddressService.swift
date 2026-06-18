@@ -5,6 +5,7 @@ import Foundation
 protocol LocationAddressService {
     func requestCurrentAddress() async throws -> AddressSuggestion
     func resolveAddress(roadAddress: String, detailText: String) async throws -> AddressSuggestion
+    func resolveAddress(latitude: Double, longitude: Double) async throws -> AddressSuggestion
 }
 
 enum LocationAddressError: LocalizedError {
@@ -78,6 +79,31 @@ final class AppleLocationAddressService: NSObject, LocationAddressService {
         return makeSuggestion(
             roadAddress: roadAddress,
             detailText: detailText,
+            coordinate: coordinate
+        )
+    }
+
+    func resolveAddress(latitude: Double, longitude: Double) async throws -> AddressSuggestion {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate) else {
+            throw LocationAddressError.locationUnavailable
+        }
+
+        let location = CLLocation(latitude: latitude, longitude: longitude)
+        let placemarks = try await geocoder.reverseGeocodeLocation(location)
+
+        guard let placemark = placemarks.first else {
+            throw LocationAddressError.addressUnavailable
+        }
+
+        let address = formattedAddress(from: placemark)
+        guard address.isEmpty == false else {
+            throw LocationAddressError.addressUnavailable
+        }
+
+        return makeSuggestion(
+            roadAddress: address,
+            detailText: "지도에서 선택한 위치",
             coordinate: coordinate
         )
     }

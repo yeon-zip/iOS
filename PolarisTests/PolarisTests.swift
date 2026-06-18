@@ -44,6 +44,7 @@ private func makeStubbedSession(
 private struct StubLocationAddressService: LocationAddressService {
     let currentAddress: AddressSuggestion
     let resolvedAddress: AddressSuggestion
+    var coordinateAddress: AddressSuggestion? = nil
 
     func requestCurrentAddress() async throws -> AddressSuggestion {
         currentAddress
@@ -56,6 +57,17 @@ private struct StubLocationAddressService: LocationAddressService {
             detailText: detailText,
             latitude: resolvedAddress.latitude,
             longitude: resolvedAddress.longitude
+        )
+    }
+
+    func resolveAddress(latitude: Double, longitude: Double) async throws -> AddressSuggestion {
+        let baseAddress = coordinateAddress ?? resolvedAddress
+        return AddressSuggestion(
+            id: baseAddress.id,
+            roadAddress: baseAddress.roadAddress,
+            detailText: baseAddress.detailText,
+            latitude: latitude,
+            longitude: longitude
         )
     }
 }
@@ -1431,5 +1443,49 @@ struct PolarisTests {
 
         #expect(viewModel.state.selectedAddress?.roadAddress == "경기도 용인시 기흥구 서천동로21번길 21")
         #expect(selectedSuggestion?.detailText == "서천마을 중앙상가 · 서천동 · 경기도 용인시 기흥구 서천동 123-4")
+    }
+
+    @Test func locationPickerViewModelAcceptsMapCoordinateSelection() async throws {
+        let locationService = StubLocationAddressService(
+            currentAddress: AddressSuggestion(
+                id: "current-location",
+                roadAddress: "경상북도 구미시 대학로 61",
+                detailText: "현재 위치",
+                latitude: 36.1450,
+                longitude: 128.3937
+            ),
+            resolvedAddress: AddressSuggestion(
+                id: "resolved-address",
+                roadAddress: "경기도 용인시 기흥구 서천동로21번길 21",
+                detailText: "서천마을 중앙상가",
+                latitude: 37.2410,
+                longitude: 127.0724
+            ),
+            coordinateAddress: AddressSuggestion(
+                id: "map-selected-address",
+                roadAddress: "경상북도 구미시 송정동 50",
+                detailText: "지도에서 선택한 위치",
+                latitude: 36.1192,
+                longitude: 128.3443
+            )
+        )
+        let viewModel = LocationPickerViewModel(
+            currentLocation: locationService.currentAddress,
+            locationAddressService: locationService
+        )
+
+        var selectedSuggestion: AddressSuggestion?
+        viewModel.onAddressSelected = { suggestion in
+            selectedSuggestion = suggestion
+        }
+
+        viewModel.didSelectMapCoordinate(latitude: 36.1192, longitude: 128.3443)
+        try await Task.sleep(for: .milliseconds(20))
+
+        viewModel.didTapConfirm()
+
+        #expect(viewModel.state.selectedAddress?.roadAddress == "경상북도 구미시 송정동 50")
+        #expect(selectedSuggestion?.latitude == 36.1192)
+        #expect(selectedSuggestion?.longitude == 128.3443)
     }
 }
